@@ -6,6 +6,7 @@ export type ScreenId =
   | 'auth_loading'
   | 'profile_setup'
   | 'auth_success'
+  | 'register_passkey'
   | 'onboarding'
   | 'home'
   | 'live_attendance'

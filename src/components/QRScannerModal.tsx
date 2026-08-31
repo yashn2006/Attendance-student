@@ -453,7 +453,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         </div>
       </div>
 
-      {/* Top Mode Switcher Tabs: Scan QR vs Type 5-Digit OTP */}
+      {/* Top Mode Switcher Tabs: Scan QR vs Type 6-Digit OTP */}
       <div className="z-30 px-4 flex justify-center bg-black/40 backdrop-blur-xs py-1">
         <div className="bg-slate-900/90 border border-slate-700/80 p-1 rounded-2xl flex items-center gap-1 shadow-2xl">
           <button
@@ -478,7 +478,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
             }`}
           >
             <KeyRound className="w-4 h-4" />
-            <span>Type 5-Digit OTP</span>
+            <span>Type 6-Digit OTP</span>
           </button>
         </div>
       </div>
@@ -486,23 +486,23 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       {/* Main Viewport Area */}
       <div className="relative flex-1 flex items-center justify-center overflow-hidden p-4">
         {scanMode === 'otp' ? (
-          /* Dedicated 5-Digit OTP Type View */
+          /* Dedicated 6-Digit OTP Type View */
           <div className="z-30 max-w-sm w-full bg-slate-900/95 border border-indigo-500/40 rounded-3xl p-6 shadow-2xl backdrop-blur-xl animate-in zoom-in-95 duration-200 space-y-5 text-center">
             <div className="w-14 h-14 rounded-2xl bg-indigo-600/30 border border-indigo-500/50 flex items-center justify-center mx-auto text-indigo-400 shadow-lg">
               <KeyRound className="w-7 h-7" />
             </div>
 
             <div>
-              <h3 className="text-lg font-black text-white tracking-tight">Enter Live 5-Digit OTP</h3>
+              <h3 className="text-lg font-black text-white tracking-tight">Enter Live 6-Digit OTP</h3>
               <p className="text-xs text-slate-400 mt-1">
-                Type the 5-digit dynamic OTP displayed on Prof. {currentLecture.professor}'s screen.
+                Type the 6-digit dynamic OTP displayed on Prof. {currentLecture.professor}'s screen.
               </p>
             </div>
 
             <form
               onSubmit={(e) => {
                 e.preventDefault();
-                if (otpInput.trim().length >= 4) {
+                if (otpInput.trim().length === 6) {
                   handleSimulateScan(`Verified Live OTP #${otpInput}`, otpInput.trim());
                 }
               }}
@@ -510,8 +510,8 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
             >
               <input
                 type="text"
-                maxLength={5}
-                placeholder="e.g. 78412"
+                maxLength={6}
+                placeholder="e.g. 784123"
                 value={otpInput}
                 onChange={(e) => setOtpInput(e.target.value.replace(/\D/g, ''))}
                 className="w-full bg-slate-950 border-2 border-indigo-500/50 rounded-2xl px-4 py-4 text-center font-mono text-3xl font-black tracking-[0.3em] text-emerald-400 focus:outline-none focus:border-indigo-400 shadow-inner"
@@ -519,7 +519,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
               <button
                 type="submit"
-                disabled={otpInput.trim().length < 4}
+                disabled={otpInput.trim().length !== 6}
                 className="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 disabled:opacity-40 text-white font-extrabold py-3.5 rounded-2xl transition-all shadow-lg active:scale-98 cursor-pointer flex items-center justify-center gap-2"
               >
                 <ShieldCheck className="w-5 h-5 text-emerald-300" />

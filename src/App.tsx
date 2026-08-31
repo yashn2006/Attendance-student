@@ -48,6 +48,7 @@ import { OtpScreen } from './screens/OtpScreen';
 import { AuthLoadingScreen } from './screens/AuthLoadingScreen';
 import { ProfileSetupScreen } from './screens/ProfileSetupScreen';
 import { AuthSuccessScreen } from './screens/AuthSuccessScreen';
+import { RegisterPasskeyScreen } from './screens/RegisterPasskeyScreen';
 import { OnboardingScreen } from './screens/OnboardingScreen';
 import { HomeScreen } from './screens/HomeScreen';
 
@@ -400,6 +401,7 @@ export function App() {
               'auth_loading',
               'profile_setup',
               'auth_success',
+              'register_passkey',
             ].includes(activeScreen)
               ? '0px'
               : 'calc(5.5rem + env(safe-area-inset-bottom, 0px))',
@@ -441,6 +443,10 @@ export function App() {
 
                 {activeScreen === 'auth_success' && (
                   <AuthSuccessScreen student={student} navigate={handleNavigate} />
+                )}
+
+                {activeScreen === 'register_passkey' && (
+                  <RegisterPasskeyScreen student={student} navigate={handleNavigate} />
                 )}
 
                 {activeScreen === 'onboarding' && <OnboardingScreen navigate={handleNavigate} />}

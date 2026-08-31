@@ -208,6 +208,113 @@ export async function getWebAuthnAuthOptions(studentId: string): Promise<{
 }
 
 // ---------------------------------------------------------------------------
+// WebAuthn registration options
+// ---------------------------------------------------------------------------
+
+export interface WebAuthnRegisterOptions {
+  challenge: string;
+  rp: { id: string; name: string };
+  user: { id: string; name: string; displayName: string };
+  pubKeyCredParams: { type: string; alg: number }[];
+  timeout?: number;
+  attestation?: string;
+  authenticatorSelection?: {
+    authenticatorAttachment?: string;
+    residentKey?: string;
+    userVerification?: string;
+  };
+  excludeCredentials?: { id: string; type?: string }[];
+}
+
+/** Request registration options from webauthn-register-options for the student. */
+export async function getWebAuthnRegisterOptions(studentId: string): Promise<{
+  data: WebAuthnRegisterOptions | null;
+  error: string | null;
+}> {
+  const { data, error } = await supabase.functions.invoke('webauthn-register-options', {
+    body: { studentId },
+  });
+  if (error) return { data: null, error: error.message || 'Network error' };
+  if (data?.status === 'error') {
+    return { data: null, error: data.message || 'Failed to generate registration options' };
+  }
+  return { data: data as WebAuthnRegisterOptions, error: null };
+}
+
+/**
+ * Convert WebAuthnRegisterOptions (base64url challenge/user.id) into the
+ * PublicKeyCredentialCreationOptions shape navigator.credentials.create expects.
+ */
+export function registerOptionsToCredentialCreationOptions(
+  options: WebAuthnRegisterOptions,
+): PublicKeyCredentialCreationOptions {
+  return {
+    challenge: base64UrlToBuffer(options.challenge),
+    rp: { id: options.rp.id, name: options.rp.name },
+    user: {
+      id: base64UrlToBuffer(options.user.id),
+      name: options.user.name,
+      displayName: options.user.displayName,
+    },
+    pubKeyCredParams: options.pubKeyCredParams.map((p) => ({
+      type: p.type as PublicKeyCredentialType,
+      alg: p.alg,
+    })),
+    timeout: options.timeout,
+    attestation: options.attestation as AttestationConveyancePreference,
+    authenticatorSelection: options.authenticatorSelection
+      ? {
+          authenticatorAttachment: options.authenticatorSelection
+            .authenticatorAttachment as AuthenticatorAttachment,
+          residentKey: options.authenticatorSelection
+            .residentKey as ResidentKeyRequirement,
+          userVerification: options.authenticatorSelection
+            .userVerification as UserVerificationRequirement,
+        }
+      : undefined,
+    excludeCredentials: options.excludeCredentials?.map((c) => ({
+      id: base64UrlToBuffer(c.id),
+      type: (c.type as PublicKeyCredentialType) ?? 'public-key',
+    })),
+  };
+}
+
+/**
+ * Serialize a native PublicKeyCredential from navigator.credentials.create()
+ * into the base64url JSON shape webauthn-register-verify expects.
+ */
+export function publicKeyCredentialToRegistration(credential: any): unknown {
+  const response = credential.response ?? {};
+  const transports =
+    typeof response.getTransports === 'function' ? response.getTransports?.() : undefined;
+  return {
+    id: credential.id,
+    rawId: bufferToBase64Url(credential.rawId),
+    type: credential.type ?? 'public-key',
+    response: {
+      clientDataJSON: bufferToBase64Url(response.clientDataJSON),
+      attestationObject: bufferToBase64Url(response.attestationObject),
+      transports: transports ?? [],
+    },
+  };
+}
+
+/** Submit the created credential to webauthn-register-verify for verification. */
+export async function verifyWebAuthnRegistration(
+  studentId: string,
+  credential: unknown,
+): Promise<{ data: { status: string } | null; error: string | null }> {
+  const { data, error } = await supabase.functions.invoke('webauthn-register-verify', {
+    body: { studentId, credential },
+  });
+  if (error) return { data: null, error: error.message || 'Network error' };
+  if (data?.status === 'error') {
+    return { data: null, error: data.message || 'Device registration failed' };
+  }
+  return { data: data as { status: string }, error: null };
+}
+
+// ---------------------------------------------------------------------------
 // Attendance marking
 // ---------------------------------------------------------------------------
 

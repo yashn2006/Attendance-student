@@ -74,7 +74,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ student, navigate }) =
         name: studentRow.name,
       });
 
-      navigate('home');
+      navigate(studentRow.webauthn_registered ? 'home' : 'register_passkey');
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Sign-in failed.');
     } finally {
