@@ -229,7 +229,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   }, []);
 
   const handleSimulateScan = useCallback(
-    async (label?: string, scannedPayload?: string) => {
+  async (label?: string, scannedPayload?: string): Promise<boolean> => {
       if (scanSuccess) return;
       setErrorMessage(null);
 
@@ -264,7 +264,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
       if (!rawInput) {
         setErrorMessage('No code or session ID provided.');
-        return;
+        return false;
       }
 
       // 1. Resolve the session (typed code or raw sessionId).
@@ -276,11 +276,11 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
       if (!resolved) {
         setErrorMessage('Unrecognized QR payload. Please scan a valid session QR or type a code.');
-        return;
+        return false;
       }
       if (resolved.error || !resolved.data) {
         setErrorMessage(resolved.error || 'Invalid or expired code.');
-        return;
+        return false;
       }
 
       const { sessionId } = resolved.data;
@@ -290,14 +290,14 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       const studentId = await resolveStudentId();
       if (!studentId) {
         setErrorMessage('You are not signed in. Please log in again.');
-        return;
+        return false;
       }
 
       // 3. Request WebAuthn authentication options for the registered device.
       const optsResult = await getWebAuthnAuthOptions(studentId);
       if (optsResult.error || !optsResult.data) {
         setErrorMessage(optsResult.error || 'No registered device found for this student.');
-        return;
+        return false  ;
       }
 
       // 4. Perform the WebAuthn assertion ceremony on the device.
@@ -311,7 +311,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         webauthnAssertion = publicKeyCredentialToAssertion(credential);
       } catch {
         setErrorMessage('Device verification failed. Please try again.');
-        return;
+        return false;
       }
 
       // 5. Mark attendance against the resolved session.
@@ -415,12 +415,16 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     };
   }, [isOpen, cameraAllowed, scanSuccess, handleSimulateScan]);
 
-  const handleManualSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!manualCode) return;
+  const handleManualSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!manualCode) return;
+  const success = await handleSimulateScan(`Dynamic Code #${manualCode}`, manualCode.trim());
+  if (success) {
     setShowManualModal(false);
-    handleSimulateScan(`Dynamic Code #${manualCode}`, manualCode.trim());
-  };
+  }
+  // On failure, modal stays open — but you'll also want the error
+  // shown *inside* the modal itself, not just behind it. See below.
+};
 
   if (!isOpen) return null;
 
@@ -554,6 +558,14 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
                 <span>Verify & Mark Present</span>
               </button>
             </form>
+            {errorMessage && (
+  <div className="p-3 rounded-2xl bg-rose-950/80 border border-rose-500/50 text-rose-200 text-xs font-semibold flex items-start gap-2 text-left">
+    <XCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+    <span>{errorMessage}</span>
+  </div>
+)}
+
+<p className="text-[10.5px] text-slate-400 font-mono"></p>
 
             <p className="text-[10.5px] text-slate-400 font-mono">
               Note: OTP refreshes every 4s on classroom screen.
