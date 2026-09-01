@@ -115,7 +115,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       // Sequential fallback array for maximum phone device compatibility (preferring rear/back camera)
       const attempts = facingMode === 'environment'
         ? [
-            { video: { facingMode: { exact: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } },
+            { video: { facingMode: { exact: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } } },
             { video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } } },
             { video: { facingMode: 'environment' } },
             { video: true },
@@ -374,18 +374,27 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     let isSubmitting = false;
 
     const scanFrame = () => {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      if (video && video.readyState === video.HAVE_ENOUGH_DATA && canvas && !isSubmitting) {
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        if (ctx) {
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(imageData.data, imageData.width, imageData.height, {
-            inversionAttempts: 'dontInvert',
-          });
+  const video = videoRef.current;
+  const canvas = canvasRef.current;
+  if (video && video.readyState === video.HAVE_ENOUGH_DATA && canvas && !isSubmitting) {
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    if (ctx) {
+      // Scan at a capped resolution — jsQR doesn't need full camera res,
+      // and full-res getImageData on every frame was the main slowdown.
+      const MAX_SCAN_DIM = 480;
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      const scale = Math.min(1, MAX_SCAN_DIM / Math.max(vw, vh));
+      const scanW = Math.round(vw * scale);
+      const scanH = Math.round(vh * scale);
+
+      canvas.width = scanW;
+      canvas.height = scanH;
+      ctx.drawImage(video, 0, 0, scanW, scanH);
+      const imageData = ctx.getImageData(0, 0, scanW, scanH);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: 'dontInvert',
+      });
           if (code && code.data && code.data.trim().length > 0) {
             isSubmitting = true;
             handleSimulateScan(`QR Scanned: ${code.data.slice(0, 18)}...`, code.data);
