@@ -239,9 +239,28 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
       const rawInput = (scannedPayload ?? '').trim();
 
+ // Unwrap the QR's JSON envelope (teacher side encodes
+// {"type":"attendance_session","code":"..."}) down to a bare code
+// string, so the rest of this function's format checks work
+// unchanged for both QR and typed/OTP paths.
+      let normalizedInput = rawInput;
+      try {
+      const parsed = JSON.parse(rawInput);
+      if (parsed && typeof parsed === 'object') {
+      if (parsed.type === 'attendance_session' && typeof parsed.code === 'string') {
+      normalizedInput = parsed.code.trim();
+      } else if (typeof parsed.sessionId === 'string') {
+      // future-proofing: allow a sessionId field too, if you ever add one
+      normalizedInput = parsed.sessionId.trim();
+    }
+  }
+} catch {
+  // Not JSON — fall through, treat rawInput as-is (typed code / bare UUID)
+}
+
       // Detect whether the input is a typed 6-digit code or a raw sessionId (QR path).
-      const looksLikeCode = /^\d{4,6}$/.test(rawInput);
-      const isSessionId = /^[0-9a-fA-F-]{36}$/.test(rawInput);
+      const looksLikeCode = /^\d{4,6}$/.test(normalizedInput);
+      const isSessionId = /^[0-9a-fA-F-]{36}$/.test(normalizedInput);
 
       if (!rawInput) {
         setErrorMessage('No code or session ID provided.');
@@ -250,9 +269,9 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
       // 1. Resolve the session (typed code or raw sessionId).
       const resolved = looksLikeCode
-        ? await resolveSessionByCode(rawInput)
+        ? await resolveSessionByCode(normalizedInput)
         : isSessionId
-          ? await resolveSessionById(rawInput)
+          ? await resolveSessionById(normalizedInput)
           : null;
 
       if (!resolved) {
@@ -265,7 +284,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       }
 
       const { sessionId } = resolved.data;
-      const codeEntered = looksLikeCode ? rawInput : '';
+      const codeEntered = looksLikeCode ? normalizedInput : '';
 
       // 2. Resolve the current student (needed by attendance-mark + webauthn-auth-options).
       const studentId = await resolveStudentId();
