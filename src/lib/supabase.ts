@@ -346,7 +346,20 @@ export async function markAttendance(
       webauthnAssertion: payload.webauthnAssertion,
     },
   });
-  if (error) return { data: null, error: error.message || 'Network error' };
+  if (error) {
+    let message = error.message || 'Network error';
+    const context = (error as { context?: Response }).context;
+    if (context) {
+      try {
+        const body = await context.json();
+        console.log('attendance-mark HTTP status:', context.status, 'body:', body);
+        if (body?.message) message = body.message;
+      } catch {
+        console.log('attendance-mark HTTP status:', context.status, 'body: <unparseable>');
+      }
+    }
+    return { data: null, error: message };
+  }
   return { data: data as AttendanceMarkResult, error: null };
 }
 
