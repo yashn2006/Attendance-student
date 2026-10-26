@@ -1,10 +1,9 @@
-import React, { useState, useEffect, useRef, Suspense, lazy } from 'react';
+import React, { useCallback, useState, useEffect, useRef, Suspense, lazy } from 'react';
 import { flushSync } from 'react-dom';
 import {
   ScreenId,
   StudentProfile,
   Lecture,
-  NotificationItem,
   OfflineAttendanceRecord,
 } from './types';
 
@@ -18,6 +17,7 @@ import { PageSkeleton } from './components/PageSkeleton';
 import { Toast } from './components/Toast';
 import { IOSPwaInstallGate } from './components/IOSPwaInstallGate';
 import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { getNotifications } from './lib/studentApi';
 import { loadFullAppState, saveFullAppState } from './lib/appStatePersistence';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -70,7 +70,47 @@ export function App() {
   const [activeScreen, setActiveScreen] = useState<ScreenId>('auth_loading');
   const [student, setStudent] = useState<StudentProfile | null>(null);
   const [lectures] = useState<Lecture[]>([]);
-  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const refreshUnreadCount = useCallback(async () => {
+    if (!isSupabaseConfigured) {
+      setUnreadCount(0);
+      return;
+    }
+
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData.session) {
+      setUnreadCount(0);
+      return;
+    }
+
+    const { data, error } = await getNotifications(50);
+    if (!error) {
+      setUnreadCount((data ?? []).filter((item) => !item.is_read).length);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshUnreadCount();
+  }, [refreshUnreadCount]);
+
+  useEffect(() => {
+    if (activeScreen === 'notifications') {
+      void refreshUnreadCount();
+    }
+  }, [activeScreen, refreshUnreadCount]);
+
+  useEffect(() => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+        void refreshUnreadCount();
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, [refreshUnreadCount]);
 
   // Restore full state from IndexedDB / LocalStorage on app boot
   useEffect(() => {
@@ -272,13 +312,6 @@ export function App() {
     showToast(`Successfully synced ${count} offline attendance records!`, 'success');
   };
 
-  // Mark all notifications read
-  const handleMarkAllNotificationsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, isUnread: false })));
-    showToast('All notifications marked as read.', 'info');
-  };
-
-  const unreadCount = notifications.filter((n) => n.isUnread).length;
   const studentProfile = student ?? EMPTY_STUDENT;
 
   return (
@@ -408,15 +441,12 @@ export function App() {
 
                 {activeScreen === 'notifications' && (
                   <NotificationsScreen
-                    notifications={notifications}
                     navigate={handleNavigate}
-                    onMarkAllAsRead={handleMarkAllNotificationsRead}
+                    onUnreadCountChange={setUnreadCount}
                   />
                 )}
 
-                {activeScreen === 'profile' && (
-                  <ProfileScreen student={studentProfile} navigate={handleNavigate} />
-                )}
+                {activeScreen === 'profile' && <ProfileScreen navigate={handleNavigate} />}
 
                 {activeScreen === 'settings' && (
                   <SettingsScreen

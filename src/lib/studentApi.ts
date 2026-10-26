@@ -25,6 +25,24 @@ export interface MonthlyRow {
   present: number;
 }
 
+export interface NotificationRow {
+  id: string;
+  title: string;
+  body: string;
+  created_at: string;
+  sender_name: string | null;
+  is_read: boolean;
+}
+
+export interface StudentProfileRow {
+  id: string;
+  name: string;
+  enrollment_no: string;
+  email: string | null;
+  webauthn_registered: boolean;
+  class_names: string[] | null;
+}
+
 interface ApiResult<T> {
   data: T | null;
   error: { message: string } | null;
@@ -64,4 +82,39 @@ export async function getMonthlyAttendance(months = 6): Promise<ApiResult<Monthl
   }));
 
   return { data: rows, error: null };
+}
+
+export async function getNotifications(limit = 50): Promise<ApiResult<NotificationRow[]>> {
+  const { data, error } = await supabase.rpc('student_notifications', {
+    p_limit: limit,
+  });
+
+  if (error) {
+    return { data: null, error };
+  }
+
+  return { data: (data ?? []) as NotificationRow[], error: null };
+}
+
+export async function markNotificationsRead(ids: string[]): Promise<ApiResult<null>> {
+  const { error } = await supabase.rpc('student_mark_notifications_read', {
+    p_ids: ids,
+  });
+
+  if (error) {
+    return { data: null, error };
+  }
+
+  return { data: null, error: null };
+}
+
+export async function getStudentProfile(): Promise<ApiResult<StudentProfileRow | null>> {
+  const { data, error } = await supabase.rpc('student_profile');
+
+  if (error) {
+    return { data: null, error };
+  }
+
+  const rows = (data ?? []) as StudentProfileRow[];
+  return { data: rows.length > 0 ? rows[0] : null, error: null };
 }

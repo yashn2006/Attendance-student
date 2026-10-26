@@ -1,250 +1,272 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { ScreenId, NotificationItem } from '../types';
-import { ArrowLeft, CheckCheck, Bell, Clock, ArrowRight, Sparkles, Trash2 } from 'lucide-react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { AlertCircle, ArrowLeft, Bell, CheckCheck, RefreshCw, User } from 'lucide-react';
+import { ScreenId } from '../types';
+import {
+  getNotifications,
+  markNotificationsRead,
+  type NotificationRow,
+} from '../lib/studentApi';
 
 interface NotificationsScreenProps {
-  notifications: NotificationItem[];
   navigate: (screen: ScreenId) => void;
-  onMarkAllAsRead: () => void;
+  onUnreadCountChange?: (count: number) => void;
 }
 
-const getCategoryStyle = (category: string) => {
-  switch (category.toLowerCase()) {
-    case 'attendance':
-      return {
-        bg: 'bg-[#EEF2FF] dark:bg-indigo-950/40',
-        border: 'border-indigo-200 dark:border-indigo-800',
-        badge: 'bg-[#6366F1] text-white',
-        text: 'text-[#6366F1] dark:text-indigo-300',
-      };
-    case 'result':
-    case 'results':
-    case 'exam':
-      return {
-        bg: 'bg-[#FEF3C7] dark:bg-amber-950/40',
-        border: 'border-amber-200 dark:border-amber-800',
-        badge: 'bg-[#D97706] text-white',
-        text: 'text-[#D97706] dark:text-amber-300',
-      };
-    case 'assignment':
-    case 'assignments':
-      return {
-        bg: 'bg-[#F3E8FF] dark:bg-purple-950/40',
-        border: 'border-purple-200 dark:border-purple-800',
-        badge: 'bg-[#7C3AED] text-white',
-        text: 'text-[#7C3AED] dark:text-purple-300',
-      };
-    case 'timetable':
-    case 'class':
-      return {
-        bg: 'bg-[#E0F2FE] dark:bg-sky-950/40',
-        border: 'border-sky-200 dark:border-sky-800',
-        badge: 'bg-[#0284C7] text-white',
-        text: 'text-[#0284C7] dark:text-sky-300',
-      };
-    default:
-      return {
-        bg: 'bg-[#F1F5F9] dark:bg-slate-800',
-        border: 'border-slate-200 dark:border-slate-700',
-        badge: 'bg-[#64748B] text-white',
-        text: 'text-[#64748B] dark:text-slate-300',
-      };
+const getKolkataDateKey = (date: Date): string => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Kolkata',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+
+  const value = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
+  return `${value('year')}-${value('month')}-${value('day')}`;
+};
+
+const formatRelativeTime = (value: string): string => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+
+  const now = new Date();
+  const diffMinutes = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 60000));
+
+  if (diffMinutes < 1) return 'Just now';
+  if (diffMinutes < 60) return `${diffMinutes} min ago`;
+
+  const dateKey = getKolkataDateKey(date);
+  const todayKey = getKolkataDateKey(now);
+
+  if (dateKey === todayKey) {
+    const diffHours = Math.floor(diffMinutes / 60);
+    return `${diffHours} hr${diffHours === 1 ? '' : 's'} ago`;
   }
+
+  const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+  if (dateKey === getKolkataDateKey(yesterday)) return 'Yesterday';
+
+  return new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Asia/Kolkata',
+  }).format(date);
 };
 
 export const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
-  notifications: initialNotifications,
   navigate,
-  onMarkAllAsRead,
+  onUnreadCountChange,
 }) => {
-  const [items, setItems] = useState<NotificationItem[]>(initialNotifications);
-  const [dismissedCount, setDismissedCount] = useState(0);
-  const [activeFilter, setActiveFilter] = useState<'ALL' | 'UNREAD' | 'ATTENDANCE' | 'ASSIGNMENT' | 'EXAM'>('ALL');
+  const [items, setItems] = useState<NotificationRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [markError, setMarkError] = useState<{ message: string; ids: string[] } | null>(null);
+  const [markingAll, setMarkingAll] = useState(false);
 
-  const categories = ['ALL', 'UNREAD', 'ATTENDANCE', 'ASSIGNMENT', 'EXAM'] as const;
+  const load = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
 
-  const handleDismiss = (id: string) => {
-    setItems((prev) => prev.filter((item) => item.id !== id));
-    setDismissedCount((prev) => prev + 1);
+    const { data, error } = await getNotifications();
+
+    if (error) {
+      setLoadError(error.message || 'Failed to load notifications.');
+      setItems([]);
+    } else {
+      const rows = [...(data ?? [])].sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+      );
+      setItems(rows);
+    }
+
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    onUnreadCountChange?.(items.filter((item) => !item.is_read).length);
+  }, [items, onUnreadCountChange]);
+
+  const setReadState = (ids: string[], isRead: boolean) => {
+    const idSet = new Set(ids);
+    setItems((prev) =>
+      prev.map((item) => (idSet.has(item.id) ? { ...item, is_read: isRead } : item)),
+    );
   };
 
-  const handleClearAll = () => {
-    setItems([]);
+  const markRead = async (ids: string[]) => {
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0) return;
+
+    setMarkError(null);
+    setReadState(uniqueIds, true);
+
+    const { error } = await markNotificationsRead(uniqueIds);
+
+    if (error) {
+      setReadState(uniqueIds, false);
+      setMarkError({
+        message: error.message || 'Could not mark notifications as read.',
+        ids: uniqueIds,
+      });
+    }
   };
 
-  const filteredItems = items.filter((item) => {
-    if (activeFilter === 'UNREAD') return item.isUnread;
-    if (activeFilter === 'ATTENDANCE') return item.category.toLowerCase().includes('attendance');
-    if (activeFilter === 'ASSIGNMENT') return item.category.toLowerCase().includes('assignment');
-    if (activeFilter === 'EXAM') return item.category.toLowerCase().includes('exam') || item.category.toLowerCase().includes('result');
-    return true;
-  });
+  const unreadCount = items.filter((item) => !item.is_read).length;
 
-  const dateGroups: ('TODAY' | 'YESTERDAY' | 'EARLIER THIS WEEK')[] = [
-    'TODAY',
-    'YESTERDAY',
-    'EARLIER THIS WEEK',
-  ];
+  const handleMarkAll = async () => {
+    const unreadIds = items.filter((item) => !item.is_read).map((item) => item.id);
+    if (unreadIds.length === 0) return;
+
+    setMarkingAll(true);
+    try {
+      await markRead(unreadIds);
+    } finally {
+      setMarkingAll(false);
+    }
+  };
 
   return (
-    <div className="space-y-6 pb-6 max-w-2xl mx-auto px-4 sm:px-6">
-      {/* Header */}
-      <div className="flex justify-between items-center pt-2">
-        <div className="flex items-center gap-3">
+    <div className="space-y-5 pb-6 max-w-2xl mx-auto px-4 sm:px-6 pt-2">
+      <div className="flex justify-between items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <button
             onClick={() => navigate('today')}
-            className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 border border-[#E2E8F0] dark:border-slate-700 flex items-center justify-center text-[#0F172A] dark:text-white hover:bg-slate-50 cursor-pointer"
+            className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-900 dark:text-white hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer shrink-0"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <div>
-            <h1 className="text-xl font-black text-[#0F172A] dark:text-white tracking-tight">
-              Inbox & Activity Alerts
+          <div className="min-w-0">
+            <h1 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
+              Notifications
             </h1>
-            <p className="text-xs text-[#64748B] dark:text-slate-400 font-medium">
-              Swipe card left/right to dismiss
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">
+              {unreadCount > 0 ? `${unreadCount} unread` : 'All caught up'}
             </p>
           </div>
         </div>
 
         <button
-          onClick={onMarkAllAsRead}
-          className="text-xs font-bold text-[#6366F1] hover:underline flex items-center gap-1 cursor-pointer"
+          onClick={() => void handleMarkAll()}
+          disabled={unreadCount === 0 || markingAll}
+          className="text-xs font-black text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-1 cursor-pointer disabled:opacity-50 disabled:no-underline disabled:cursor-default shrink-0"
         >
-          <CheckCheck className="w-4 h-4" />
-          <span>Mark All Read</span>
+          <CheckCheck className={`w-4 h-4 ${markingAll ? 'animate-pulse' : ''}`} />
+          <span>Mark all as read</span>
         </button>
       </div>
 
-      {/* Category Pills Filter */}
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-        {categories.map((cat) => (
+      {markError && (
+        <div className="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+            <p className="text-xs font-bold text-rose-700 dark:text-rose-300 truncate">
+              {markError.message}
+            </p>
+          </div>
           <button
-            key={cat}
-            onClick={() => setActiveFilter(cat)}
-            className={`px-3 py-1.5 rounded-xl text-[11px] font-black tracking-wider uppercase transition-all cursor-pointer shrink-0 ${
-              activeFilter === cat
-                ? 'bg-indigo-600 text-white shadow-xs'
-                : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50'
-            }`}
+            onClick={() => void markRead(markError.ids)}
+            className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-rose-600 text-white text-[11px] font-black active:scale-95 transition-transform cursor-pointer shrink-0"
           >
-            {cat}
+            <RefreshCw className="w-3 h-3" />
+            Retry
           </button>
-        ))}
-      </div>
-
-      {dismissedCount > 0 && (
-        <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 p-2.5 rounded-xl text-center text-xs font-bold text-emerald-700 dark:text-emerald-300">
-          ✓ Dismissed {dismissedCount} notification{dismissedCount > 1 ? 's' : ''}
         </div>
       )}
 
-      {/* Date Groups */}
-      <div className="space-y-6">
-        {filteredItems.length === 0 ? (
-          <div className="text-center py-12 bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-300 dark:border-slate-800 p-6 space-y-2">
-            <Bell className="w-10 h-10 text-indigo-500 mx-auto opacity-50" />
-            <h3 className="text-sm font-black text-slate-900 dark:text-white">No notifications in {activeFilter.toLowerCase()}</h3>
-            <p className="text-xs text-slate-400">All caught up! You have no pending notifications in this category.</p>
-          </div>
-        ) : (
-          dateGroups.map((group) => {
-            const groupNotifs = filteredItems.filter((n) => n.dateGroup === group);
-            if (groupNotifs.length === 0) return null;
+      {loading ? (
+        <div className="space-y-3">
+          {[0, 1, 2].map((i) => (
+            <div
+              key={i}
+              className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-4.5 space-y-3 animate-pulse"
+            >
+              <div className="flex justify-between gap-3">
+                <div className="h-3 w-24 rounded-md bg-slate-200 dark:bg-slate-800" />
+                <div className="h-3 w-16 rounded-md bg-slate-200 dark:bg-slate-800" />
+              </div>
+              <div className="h-4 w-48 rounded-md bg-slate-300 dark:bg-slate-700" />
+              <div className="h-3 w-full rounded-md bg-slate-200 dark:bg-slate-800" />
+              <div className="h-3 w-2/3 rounded-md bg-slate-200 dark:bg-slate-800" />
+            </div>
+          ))}
+        </div>
+      ) : loadError ? (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-rose-200 dark:border-rose-900/50 p-8 text-center space-y-3">
+          <AlertCircle className="w-9 h-9 text-rose-500 mx-auto" />
+          <h3 className="text-sm font-black text-slate-900 dark:text-white">
+            Could not load notifications
+          </h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{loadError}</p>
+          <button
+            onClick={() => void load()}
+            className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-black shadow-md shadow-indigo-500/25 active:scale-95 transition-transform cursor-pointer"
+          >
+            Retry
+          </button>
+        </div>
+      ) : items.length === 0 ? (
+        <div className="bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 p-10 text-center space-y-2">
+          <Bell className="w-9 h-9 text-indigo-500 mx-auto opacity-60" />
+          <h3 className="text-sm font-black text-slate-900 dark:text-white">No notifications yet</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+            Updates from your teachers will appear here.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {items.map((item) => {
+            const isUnread = item.is_read === false;
 
             return (
-              <div key={group} className="space-y-3">
-                <h3 className="text-xs font-black uppercase tracking-widest text-[#64748B] dark:text-slate-400">
-                  {group}
-                </h3>
-
-                <div className="space-y-3">
-                  <AnimatePresence>
-                    {groupNotifs.map((n) => {
-                      const style = getCategoryStyle(n.category);
-
-                      return (
-                        <motion.div
-                          key={n.id}
-                          layout
-                          initial={{ opacity: 0, height: 'auto' }}
-                          animate={{ opacity: 1, height: 'auto' }}
-                          exit={{ opacity: 0, x: -300, height: 0, marginBottom: 0 }}
-                          drag="x"
-                          dragDirectionLock={true}
-                          dragMomentum={false}
-                          dragConstraints={{ left: 0, right: 0 }}
-                          dragElastic={0.4}
-                          onDragEnd={(_, info) => {
-                            if (Math.abs(info.offset.x) > 120) {
-                              handleDismiss(n.id);
-                            }
-                          }}
-                          className="relative group touch-pan-y"
-                        >
-                          {/* Background Dismiss Trash Indicator */}
-                          <div className="absolute inset-0 bg-rose-500/10 rounded-2xl flex items-center justify-between px-6 text-rose-500 font-extrabold text-xs">
-                            <div className="flex items-center gap-1">
-                              <Trash2 className="w-4 h-4" />
-                              <span>Dismiss</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <span>Dismiss</span>
-                              <Trash2 className="w-4 h-4" />
-                            </div>
-                          </div>
-
-                          <div
-                            onClick={() => {
-                              if (n.actionScreen) {
-                                navigate(n.actionScreen);
-                              }
-                            }}
-                            className={`p-4.5 rounded-2xl border transition-all cursor-pointer relative shadow-2xs hover:shadow-md ${
-                              n.isUnread
-                                ? `${style.bg} ${style.border} ring-1 ring-indigo-500/20`
-                                : 'bg-white dark:bg-slate-900 border-[#E2E8F0] dark:border-slate-800 opacity-90'
-                            }`}
-                          >
-                            <div className="flex justify-between items-start">
-                              <div className="flex items-center gap-2">
-                                {n.isUnread && (
-                                  <span className="w-2.5 h-2.5 rounded-full bg-[#6366F1] animate-pulse"></span>
-                                )}
-                                <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wider ${style.badge}`}>
-                                  {n.category}
-                                </span>
-                              </div>
-                              <span className="text-[10px] text-[#64748B] dark:text-slate-400 font-extrabold">{n.timestamp}</span>
-                            </div>
-
-                            <h4 className="text-[15px] font-black text-[#0F172A] dark:text-white mt-2 leading-snug">
-                              {n.title}
-                            </h4>
-                            <p className="text-xs text-[#475569] dark:text-slate-300 mt-1 leading-relaxed font-medium">
-                              {n.message}
-                            </p>
-
-                            {n.actionScreen && (
-                              <div className="mt-3 flex justify-end">
-                                <span className={`text-[11px] font-extrabold ${style.text} hover:underline flex items-center gap-1`}>
-                                  <span>View Details</span>
-                                  <ArrowRight className="w-3.5 h-3.5" />
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </motion.div>
-                      );
-                    })}
-                  </AnimatePresence>
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  if (isUnread) void markRead([item.id]);
+                }}
+                className={`w-full text-left p-4.5 rounded-2xl border shadow-2xs transition-all ${
+                  isUnread
+                    ? 'bg-indigo-50/70 dark:bg-indigo-950/30 border-indigo-200 dark:border-indigo-800 ring-1 ring-indigo-500/10'
+                    : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:bg-slate-50/60 dark:hover:bg-slate-800/40'
+                } ${isUnread ? 'cursor-pointer' : 'cursor-default'}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center gap-1.5 min-w-0">
+                    <User className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">{item.sender_name || 'Teacher'}</span>
+                  </span>
+                  <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 shrink-0">
+                    {formatRelativeTime(item.created_at)}
+                  </span>
                 </div>
-              </div>
+
+                <div className="mt-2 flex items-start gap-2">
+                  {isUnread && (
+                    <span className="w-2 h-2 rounded-full bg-indigo-500 mt-1.5 shrink-0" />
+                  )}
+                  <h3
+                    className={`text-[15px] leading-snug ${
+                      isUnread
+                        ? 'font-black text-slate-900 dark:text-white'
+                        : 'font-bold text-slate-800 dark:text-slate-200'
+                    }`}
+                  >
+                    {item.title}
+                  </h3>
+                </div>
+
+                <p className="mt-1 text-xs text-slate-600 dark:text-slate-300 font-medium leading-relaxed whitespace-pre-wrap">
+                  {item.body}
+                </p>
+              </button>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
     </div>
   );
 };
