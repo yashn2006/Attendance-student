@@ -7,7 +7,7 @@ interface SelectLectureModalProps {
   isOpen: boolean;
   onClose: () => void;
   lectures: Lecture[];
-  selectedLecture: Lecture;
+  selectedLecture: Lecture | null;
   onSelectAndScan: (lecture: Lecture) => void;
 }
 
@@ -87,7 +87,7 @@ export const SelectLectureModal: React.FC<SelectLectureModalProps> = ({
             </div>
 
             {lectures.map((lec) => {
-              const isCurrent = lec.id === selectedLecture.id;
+              const isCurrent = lec.id === selectedLecture?.id;
               const isMarked = lec.attendanceStatus === 'marked';
 
               return (

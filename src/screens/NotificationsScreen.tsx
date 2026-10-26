@@ -93,7 +93,7 @@ export const NotificationsScreen: React.FC<NotificationsScreenProps> = ({
       <div className="flex justify-between items-center pt-2">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('home')}
+            onClick={() => navigate('today')}
             className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 border border-[#E2E8F0] dark:border-slate-700 flex items-center justify-center text-[#0F172A] dark:text-white hover:bg-slate-50 cursor-pointer"
           >
             <ArrowLeft className="w-5 h-5" />

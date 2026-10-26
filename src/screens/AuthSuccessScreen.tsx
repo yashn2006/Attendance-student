@@ -10,7 +10,7 @@ interface AuthSuccessScreenProps {
 export const AuthSuccessScreen: React.FC<AuthSuccessScreenProps> = ({ student, navigate }) => {
   useEffect(() => {
     const timer = setTimeout(() => {
-      navigate('home');
+      navigate('today');
     }, 2200);
 
     return () => clearTimeout(timer);
@@ -63,7 +63,7 @@ export const AuthSuccessScreen: React.FC<AuthSuccessScreenProps> = ({ student, n
         </div>
 
         <button
-          onClick={() => navigate('home')}
+          onClick={() => navigate('today')}
           className="w-full h-13 min-h-[50px] bg-gradient-to-r from-[#6366F1] to-[#8B5CF6] hover:opacity-95 text-white font-bold rounded-2xl text-xs sm:text-sm tracking-wide shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2 active:scale-[0.97] transition-all cursor-pointer"
         >
           <span>Launching Dashboard...</span>

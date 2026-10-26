@@ -74,7 +74,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
       {/* Header */}
       <div className="flex items-center gap-3 pt-2">
         <button
-          onClick={() => navigate('home')}
+          onClick={() => navigate('profile')}
           className="w-10 h-10 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-900 dark:text-white hover:bg-slate-50 cursor-pointer shadow-2xs transition-transform active:scale-95"
         >
           <ArrowLeft className="w-5 h-5" />

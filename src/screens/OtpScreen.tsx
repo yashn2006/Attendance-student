@@ -62,7 +62,7 @@ export const OtpScreen: React.FC<OtpScreenProps> = React.memo(({ email, navigate
     timeoutsRef.current.push(t2);
 
     const t3 = setTimeout(() => {
-      navigate('home');
+      navigate('today');
     }, 1050);
     timeoutsRef.current.push(t3);
   }, [navigate]);

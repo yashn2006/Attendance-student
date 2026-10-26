@@ -3,29 +3,10 @@ import { flushSync } from 'react-dom';
 import {
   ScreenId,
   StudentProfile,
-  StackedHeroCard,
   Lecture,
-  Assignment,
-  LibraryBook,
-  SubjectAttendance,
-  SubjectGrade,
-  CampusEvent,
-  GoalItem,
   NotificationItem,
   OfflineAttendanceRecord,
 } from './types';
-import {
-  INITIAL_STUDENT_PROFILE,
-  INITIAL_HERO_CARDS,
-  INITIAL_LECTURES,
-  INITIAL_ASSIGNMENTS,
-  INITIAL_LIBRARY_BOOKS,
-  INITIAL_SUBJECT_ATTENDANCE,
-  INITIAL_SUBJECT_GRADES,
-  INITIAL_EVENTS,
-  INITIAL_GOALS,
-  INITIAL_NOTIFICATIONS,
-} from './data/mockData';
 
 // Layout & Frame Components
 import { MobileFrame } from './components/MobileFrame';
@@ -50,48 +31,59 @@ import { ProfileSetupScreen } from './screens/ProfileSetupScreen';
 import { AuthSuccessScreen } from './screens/AuthSuccessScreen';
 import { RegisterPasskeyScreen } from './screens/RegisterPasskeyScreen';
 import { OnboardingScreen } from './screens/OnboardingScreen';
-import { HomeScreen } from './screens/HomeScreen';
 
-// Secondary screens code-split for lightweight memory footprint on mobile
+// Tab screens code-split for lightweight memory footprint on mobile
+const TodayScreen = lazy(() => import('./screens/TodayScreen').then((m) => ({ default: m.TodayScreen })));
 const LiveAttendanceScreen = lazy(() => import('./screens/LiveAttendanceScreen').then((m) => ({ default: m.LiveAttendanceScreen })));
-const TodayAttendanceScreen = lazy(() => import('./screens/TodayAttendanceScreen').then((m) => ({ default: m.TodayAttendanceScreen })));
-const TimetableScreen = lazy(() => import('./screens/TimetableScreen').then((m) => ({ default: m.TimetableScreen })));
-const ClassDetailsScreen = lazy(() => import('./screens/ClassDetailsScreen').then((m) => ({ default: m.ClassDetailsScreen })));
-const AssignmentsScreen = lazy(() => import('./screens/AssignmentsScreen').then((m) => ({ default: m.AssignmentsScreen })));
-const LibraryScreen = lazy(() => import('./screens/LibraryScreen').then((m) => ({ default: m.LibraryScreen })));
-const AnalyticsScreen = lazy(() => import('./screens/AnalyticsScreen').then((m) => ({ default: m.AnalyticsScreen })));
-const ResultsScreen = lazy(() => import('./screens/ResultsScreen').then((m) => ({ default: m.ResultsScreen })));
-const CreditsScreen = lazy(() => import('./screens/CreditsScreen').then((m) => ({ default: m.CreditsScreen })));
-const GoalsScreen = lazy(() => import('./screens/GoalsScreen').then((m) => ({ default: m.GoalsScreen })));
-const EventsScreen = lazy(() => import('./screens/EventsScreen').then((m) => ({ default: m.EventsScreen })));
+const AttendanceScreen = lazy(() => import('./screens/AttendanceScreen').then((m) => ({ default: m.AttendanceScreen })));
 const NotificationsScreen = lazy(() => import('./screens/NotificationsScreen').then((m) => ({ default: m.NotificationsScreen })));
 const ProfileScreen = lazy(() => import('./screens/ProfileScreen').then((m) => ({ default: m.ProfileScreen })));
 const SettingsScreen = lazy(() => import('./screens/SettingsScreen').then((m) => ({ default: m.SettingsScreen })));
 
+const EMPTY_STUDENT: StudentProfile = {
+  name: '',
+  idNumber: '',
+  collegeName: '',
+  department: '',
+  semester: '',
+  avatarUrl: '',
+  email: '',
+  overallAttendance: 0,
+  cgpa: 0,
+  totalCredits: 0,
+  requiredCredits: 0,
+  classRank: 0,
+  totalStudentsInClass: 0,
+  scholarshipEligible: false,
+};
+
+const RESTORABLE_SCREENS: ScreenId[] = [
+  'today',
+  'scan',
+  'attendance',
+  'notifications',
+  'profile',
+  'settings',
+];
+
 export function App() {
   const [activeScreen, setActiveScreen] = useState<ScreenId>('auth_loading');
-  const [student, setStudent] = useState<StudentProfile>(INITIAL_STUDENT_PROFILE);
-  const [heroCards, setHeroCards] = useState<StackedHeroCard[]>(INITIAL_HERO_CARDS);
-  const [lectures, setLectures] = useState<Lecture[]>(INITIAL_LECTURES);
-  const [assignments, setAssignments] = useState<Assignment[]>(INITIAL_ASSIGNMENTS);
-  const [books, setBooks] = useState<LibraryBook[]>(INITIAL_LIBRARY_BOOKS);
-  const [subjects, setSubjects] = useState<SubjectAttendance[]>(INITIAL_SUBJECT_ATTENDANCE);
-  const [grades] = useState<SubjectGrade[]>(INITIAL_SUBJECT_GRADES);
-  const [events, setEvents] = useState<CampusEvent[]>(INITIAL_EVENTS);
-  const [goals, setGoals] = useState<GoalItem[]>(INITIAL_GOALS);
-  const [notifications, setNotifications] = useState<NotificationItem[]>(INITIAL_NOTIFICATIONS);
+  const [student, setStudent] = useState<StudentProfile | null>(null);
+  const [lectures] = useState<Lecture[]>([]);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   // Restore full state from IndexedDB / LocalStorage on app boot
   useEffect(() => {
     loadFullAppState().then((saved) => {
       if (saved) {
-        if (saved.activeScreen && saved.activeScreen !== 'auth_loading') {
-          setActiveScreen(saved.activeScreen as ScreenId);
+        const restoredScreen = saved.activeScreen === 'home' ? 'today' : saved.activeScreen;
+        if (RESTORABLE_SCREENS.includes(restoredScreen as ScreenId)) {
+          setActiveScreen(restoredScreen as ScreenId);
         }
         if (typeof saved.isDarkMode === 'boolean') {
           setIsDarkMode(saved.isDarkMode);
         }
-        if (Array.isArray(saved.markedLectures) && saved.markedLectures.length > 0) {
+        if (Array.isArray(saved.markedLectures)) {
           setMarkedLectures(saved.markedLectures);
         }
         if (Array.isArray(saved.offlineQueue)) {
@@ -151,8 +143,8 @@ export function App() {
   }, []);
 
   // App States & Scans
-  const [selectedLecture, setSelectedLecture] = useState<Lecture>(INITIAL_LECTURES[1]); // CS201
-  const [markedLectures, setMarkedLectures] = useState<string[]>(['lec-1']);
+  const [selectedLecture, setSelectedLecture] = useState<Lecture | null>(null);
+  const [markedLectures, setMarkedLectures] = useState<string[]>([]);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [isSelectLectureOpen, setIsSelectLectureOpen] = useState(false);
   const [isOffline, setIsOffline] = useState(false);
@@ -243,35 +235,20 @@ export function App() {
   };
 
   const handleUpdateStudent = (updated: Partial<StudentProfile>) => {
-    setStudent((prev) => ({ ...prev, ...updated }));
+    setStudent((prev) => ({ ...(prev ?? EMPTY_STUDENT), ...updated }));
   };
 
   // Mark Attendance Handler
   const handleAttendanceSuccess = (lectureId: string, offline: boolean) => {
     if (!markedLectures.includes(lectureId)) {
       setMarkedLectures((prev) => [...prev, lectureId]);
-
-      // Update lecture status in list
-      setLectures((prev) =>
-        prev.map((lec) =>
-          lec.id === lectureId
-            ? { ...lec, attendanceStatus: 'marked', attendancePercentage: Math.min(100, lec.attendancePercentage + 2) }
-            : lec
-        )
-      );
-
-      // Increment overall attendance
-      setStudent((prev) => ({
-        ...prev,
-        overallAttendance: Math.min(100, prev.overallAttendance + 1),
-      }));
     }
 
     if (offline) {
       const record: OfflineAttendanceRecord = {
         id: `rec-${Date.now()}`,
         lectureId,
-        lectureTitle: selectedLecture.title,
+        lectureTitle: selectedLecture?.title ?? 'Lecture',
         scannedAt: new Date().toLocaleTimeString(),
         qrPayload: `QR_PASS_${lectureId}_${Date.now()}`,
         isSynced: false,
@@ -295,68 +272,6 @@ export function App() {
     showToast(`Successfully synced ${count} offline attendance records!`, 'success');
   };
 
-  // Assignment submission handler
-  const handleSubmitAssignment = (assignmentId: string, fileName: string) => {
-    setAssignments((prev) =>
-      prev.map((a) =>
-        a.id === assignmentId
-          ? {
-              ...a,
-              status: 'Submitted',
-              readinessPercentage: 100,
-              submissionFile: fileName,
-              submittedAt: 'Just Now',
-            }
-          : a
-      )
-    );
-    showToast(`Assignment "${fileName}" submitted successfully!`, 'success');
-  };
-
-  // Library renewal handler
-  const handleRenewBook = (bookId: string) => {
-    setBooks((prev) =>
-      prev.map((b) =>
-        b.id === bookId
-          ? {
-              ...b,
-              daysRemaining: (b.daysRemaining || 0) + 14,
-              isDueSoon: false,
-              dueDate: 'Nov 20, 2026',
-            }
-          : b
-      )
-    );
-    showToast('Book renewed for +14 days!', 'success');
-  };
-
-  // RSVP Event handler
-  const handleToggleRsvp = (eventId: string) => {
-    setEvents((prev) =>
-      prev.map((e) =>
-        e.id === eventId
-          ? {
-              ...e,
-              isRsvped: !e.isRsvped,
-              attendeesCount: e.isRsvped ? e.attendeesCount - 1 : e.attendeesCount + 1,
-            }
-          : e
-      )
-    );
-    const ev = events.find((e) => e.id === eventId);
-    if (ev && !ev.isRsvped) {
-      showToast(`RSVP Confirmed for ${ev.title}!`, 'success');
-    } else {
-      showToast('RSVP Cancelled.', 'info');
-    }
-  };
-
-  // Add Goal handler
-  const handleAddGoal = (newGoal: GoalItem) => {
-    setGoals((prev) => [newGoal, ...prev]);
-    showToast('New academic milestone goal created!', 'success');
-  };
-
   // Mark all notifications read
   const handleMarkAllNotificationsRead = () => {
     setNotifications((prev) => prev.map((n) => ({ ...n, isUnread: false })));
@@ -364,6 +279,7 @@ export function App() {
   };
 
   const unreadCount = notifications.filter((n) => n.isUnread).length;
+  const studentProfile = student ?? EMPTY_STUDENT;
 
   return (
     <IOSPwaInstallGate>
@@ -376,7 +292,7 @@ export function App() {
 
         {/* Header Bar */}
         <Header
-          student={student}
+          student={studentProfile}
           activeScreen={activeScreen}
           navigate={handleNavigate}
           unreadNotificationsCount={unreadCount}
@@ -402,6 +318,7 @@ export function App() {
               'profile_setup',
               'auth_success',
               'register_passkey',
+              'onboarding',
             ].includes(activeScreen)
               ? '0px'
               : 'calc(5.5rem + env(safe-area-inset-bottom, 0px))',
@@ -422,11 +339,11 @@ export function App() {
                 {activeScreen === 'welcome' && <WelcomeScreen navigate={handleNavigate} />}
 
                 {activeScreen === 'login' && (
-                  <LoginScreen student={student} navigate={handleNavigate} />
+                  <LoginScreen student={studentProfile} navigate={handleNavigate} />
                 )}
 
                 {activeScreen === 'otp' && (
-                  <OtpScreen email={student.email} navigate={handleNavigate} />
+                  <OtpScreen email={studentProfile.email} navigate={handleNavigate} />
                 )}
 
                 {activeScreen === 'auth_loading' && (
@@ -435,41 +352,25 @@ export function App() {
 
                 {activeScreen === 'profile_setup' && (
                   <ProfileSetupScreen
-                    student={student}
+                    student={studentProfile}
                     navigate={handleNavigate}
                     onUpdateStudent={handleUpdateStudent}
                   />
                 )}
 
                 {activeScreen === 'auth_success' && (
-                  <AuthSuccessScreen student={student} navigate={handleNavigate} />
+                  <AuthSuccessScreen student={studentProfile} navigate={handleNavigate} />
                 )}
 
                 {activeScreen === 'register_passkey' && (
-                  <RegisterPasskeyScreen student={student} navigate={handleNavigate} />
+                  <RegisterPasskeyScreen student={studentProfile} navigate={handleNavigate} />
                 )}
 
                 {activeScreen === 'onboarding' && <OnboardingScreen navigate={handleNavigate} />}
 
-                {activeScreen === 'home' && (
-                  <HomeScreen
-                    student={student}
-                    lectures={lectures}
-                    assignments={assignments}
-                    books={books}
-                    subjects={subjects}
-                    grades={grades}
-                    goals={goals}
-                    navigate={handleNavigate}
-                    openScannerModal={() => setIsSelectLectureOpen(true)}
-                    onSelectLecture={setSelectedLecture}
-                    onSubmitAssignment={handleSubmitAssignment}
-                    onRenewBook={handleRenewBook}
-                    onAddGoal={handleAddGoal}
-                  />
-                )}
+                {activeScreen === 'today' && <TodayScreen />}
 
-                {activeScreen === 'live_attendance' && (
+                {activeScreen === 'scan' && selectedLecture && (
                   <LiveAttendanceScreen
                     currentLecture={selectedLecture}
                     navigate={handleNavigate}
@@ -479,85 +380,31 @@ export function App() {
                   />
                 )}
 
-                {activeScreen === 'today_attendance' && (
-                  <TodayAttendanceScreen
-                    lectures={lectures}
-                    markedLectures={markedLectures}
-                    navigate={handleNavigate}
-                    openScannerModal={() => setIsSelectLectureOpen(true)}
-                  />
+                {activeScreen === 'scan' && !selectedLecture && (
+                  <div className="space-y-6 pb-6 max-w-2xl mx-auto px-4 sm:px-6 pt-2">
+                    <div>
+                      <h1 className="text-xl font-black text-slate-900 dark:text-slate-100 tracking-tight">
+                        Scan Attendance
+                      </h1>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">
+                        Select a lecture to launch the QR scanner
+                      </p>
+                    </div>
+                    <div className="bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-slate-300 dark:border-slate-700 p-10 text-center space-y-4">
+                      <p className="text-sm font-bold text-slate-500 dark:text-slate-400">
+                        No live lecture selected
+                      </p>
+                      <button
+                        onClick={() => setIsSelectLectureOpen(true)}
+                        className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-black shadow-md shadow-indigo-500/25 active:scale-95 transition-transform cursor-pointer"
+                      >
+                        Select Lecture
+                      </button>
+                    </div>
+                  </div>
                 )}
 
-                {activeScreen === 'timetable' && (
-                  <TimetableScreen
-                    lectures={lectures}
-                    navigate={handleNavigate}
-                    onSelectLecture={setSelectedLecture}
-                  />
-                )}
-
-                {activeScreen === 'class_details' && (
-                  <ClassDetailsScreen
-                    lecture={selectedLecture}
-                    navigate={handleNavigate}
-                    openScannerModal={() => setIsSelectLectureOpen(true)}
-                  />
-                )}
-
-                {activeScreen === 'assignments' && (
-                  <AssignmentsScreen
-                    assignments={assignments}
-                    navigate={handleNavigate}
-                    onSubmitAssignment={handleSubmitAssignment}
-                  />
-                )}
-
-                {activeScreen === 'library' && (
-                  <LibraryScreen
-                    student={student}
-                    books={books}
-                    navigate={handleNavigate}
-                    onRenewBook={handleRenewBook}
-                  />
-                )}
-
-                {(activeScreen === 'analytics' || activeScreen === 'attendance_analytics') && (
-                  <AnalyticsScreen
-                    student={student}
-                    lectures={lectures}
-                    assignments={assignments}
-                    books={books}
-                    subjects={subjects}
-                    grades={grades}
-                    goals={goals}
-                    navigate={handleNavigate}
-                    openScannerModal={() => setIsSelectLectureOpen(true)}
-                    onSelectLecture={setSelectedLecture}
-                    onSubmitAssignment={handleSubmitAssignment}
-                    onRenewBook={handleRenewBook}
-                    onAddGoal={handleAddGoal}
-                  />
-                )}
-
-                {activeScreen === 'results' && (
-                  <ResultsScreen student={student} grades={grades} navigate={handleNavigate} />
-                )}
-
-                {activeScreen === 'credits' && (
-                  <CreditsScreen student={student} navigate={handleNavigate} />
-                )}
-
-                {activeScreen === 'goals' && (
-                  <GoalsScreen goals={goals} navigate={handleNavigate} onAddGoal={handleAddGoal} />
-                )}
-
-                {activeScreen === 'events' && (
-                  <EventsScreen
-                    events={events}
-                    navigate={handleNavigate}
-                    onToggleRsvp={handleToggleRsvp}
-                  />
-                )}
+                {activeScreen === 'attendance' && <AttendanceScreen />}
 
                 {activeScreen === 'notifications' && (
                   <NotificationsScreen
@@ -568,7 +415,7 @@ export function App() {
                 )}
 
                 {activeScreen === 'profile' && (
-                  <ProfileScreen student={student} navigate={handleNavigate} />
+                  <ProfileScreen student={studentProfile} navigate={handleNavigate} />
                 )}
 
                 {activeScreen === 'settings' && (
@@ -600,15 +447,17 @@ export function App() {
         />
 
         {/* Modal 2: QR Camera Attendance Scanner Modal */}
-        <QRScannerModal
-          isOpen={isScannerOpen}
-          onClose={() => setIsScannerOpen(false)}
-          currentLecture={selectedLecture}
-          onAttendanceSuccess={handleAttendanceSuccess}
-          isOffline={isOffline}
-        />
+        {selectedLecture && (
+          <QRScannerModal
+            isOpen={isScannerOpen}
+            onClose={() => setIsScannerOpen(false)}
+            currentLecture={selectedLecture}
+            onAttendanceSuccess={handleAttendanceSuccess}
+            isOffline={isOffline}
+          />
+        )}
 
-        {/* Bottom Floating Notched Navigation Bar */}
+        {/* Bottom Floating Navigation Bar */}
         <BottomNav
           activeScreen={activeScreen}
           navigate={handleNavigate}

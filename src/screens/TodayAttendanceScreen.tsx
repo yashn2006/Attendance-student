@@ -85,7 +85,7 @@ export const TodayAttendanceScreen: React.FC<TodayAttendanceScreenProps> = ({
       <div className="flex items-center justify-between pt-2">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('home')}
+            onClick={() => navigate('today')}
             className="w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xs flex items-center justify-center text-slate-800 dark:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition-all cursor-pointer"
           >
             <ArrowLeft className="w-5 h-5" />

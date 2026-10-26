@@ -8,22 +8,12 @@ export type ScreenId =
   | 'auth_success'
   | 'register_passkey'
   | 'onboarding'
-  | 'home'
-  | 'live_attendance'
-  | 'today_attendance'
-  | 'scanner'
-  | 'timetable'
-  | 'class_details'
-  | 'assignments'
-  | 'library'
-  | 'attendance_analytics'
-  | 'results'
-  | 'goals'
-  | 'events'
+  | 'today'
+  | 'scan'
+  | 'attendance'
   | 'notifications'
   | 'profile'
-  | 'settings'
-  | 'credits';
+  | 'settings';
 
 export interface StudentProfile {
   name: string;
@@ -42,23 +32,6 @@ export interface StudentProfile {
   scholarshipEligible: boolean;
 }
 
-export interface StackedHeroCard {
-  id: string;
-  order: number;
-  title: string;
-  subtitle: string;
-  accentColor: string; // gradient or hex class
-  badgeText?: string;
-  badgeType?: 'live' | 'due' | 'success' | 'info';
-  iconName: string;
-  statPrimary: string;
-  statSecondary: string;
-  locationOrTime?: string;
-  ctaText: string;
-  targetScreen: ScreenId;
-  details: string;
-}
-
 export interface Lecture {
   id: string;
   code: string;
@@ -75,79 +48,6 @@ export interface Lecture {
   onlineMeetingUrl?: string;
   credits: number;
   attendancePercentage: number;
-}
-
-export interface Assignment {
-  id: string;
-  title: string;
-  subject: string;
-  faculty: string;
-  dueDate: string;
-  dueTime: string;
-  priority: 'High' | 'Medium' | 'Low';
-  status: 'Pending' | 'Submitted' | 'Overdue' | 'Completed';
-  readinessPercentage: number; // e.g. 85
-  submissionFile?: string;
-  submittedAt?: string;
-}
-
-export interface LibraryBook {
-  id: string;
-  title: string;
-  author: string;
-  coverImage: string;
-  category: 'Textbook' | 'E-book' | 'Journal' | 'Paper';
-  dueDate?: string;
-  daysRemaining?: number;
-  isDueSoon?: boolean;
-  status: 'borrowed' | 'recommended' | 'returned';
-  myRating?: number;
-  finishedDate?: string;
-}
-
-export interface SubjectAttendance {
-  subjectId: string;
-  subjectName: string;
-  code: string;
-  attended: number;
-  total: number;
-  percentage: number;
-  status: 'Safe' | 'Warning' | 'Danger';
-  instructor: string;
-}
-
-export interface SubjectGrade {
-  code: string;
-  subjectName: string;
-  grade: 'A' | 'A-' | 'B+' | 'B' | 'B-' | 'C+';
-  gpaPoint: number;
-  credits: number;
-  tags: string[];
-  semester: string;
-}
-
-export interface CampusEvent {
-  id: string;
-  title: string;
-  category: 'Hackathon' | 'Guest Lecture' | 'Cultural' | 'Workshop';
-  date: string;
-  time: string;
-  venue: string;
-  organizer: string;
-  attendeesCount: number;
-  isRsvped: boolean;
-  image: string;
-}
-
-export interface GoalItem {
-  id: string;
-  title: string;
-  category: 'Attendance' | 'CGPA' | 'Assignment' | 'Credits';
-  currentValue: number;
-  targetValue: number;
-  unit: string;
-  deadline: string;
-  isCompleted: boolean;
 }
 
 export interface NotificationItem {

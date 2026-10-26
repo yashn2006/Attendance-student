@@ -28,6 +28,7 @@ import {
   Check,
   X,
   Lock,
+  Settings,
 } from 'lucide-react';
 
 interface ProfileScreenProps {
@@ -147,7 +148,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ student, navigate 
       <div className="flex justify-between items-center pt-2">
         <div className="flex items-center gap-3">
           <button
-            onClick={() => navigate('home')}
+            onClick={() => navigate('today')}
             className="w-10 h-10 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xs flex items-center justify-center text-slate-900 dark:text-white hover:bg-slate-50 cursor-pointer transition-transform active:scale-95"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -162,6 +163,15 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ student, navigate 
             <p className="text-xs text-slate-500 dark:text-slate-400 font-semibold">Official Academic Identity & Digital ID</p>
           </div>
         </div>
+
+        <button
+          onClick={() => navigate('settings')}
+          title="Settings"
+          aria-label="Settings"
+          className="w-10 h-10 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xs flex items-center justify-center text-slate-900 dark:text-white hover:bg-slate-50 cursor-pointer transition-transform active:scale-95"
+        >
+          <Settings className="w-5 h-5" />
+        </button>
       </div>
 
       {/* Luxury Digital Hero Banner */}

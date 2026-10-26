@@ -188,7 +188,7 @@ export const RegisterPasskeyScreen: React.FC<RegisterPasskeyScreenProps> = ({
         {/* Action Button */}
         {stage === 'success' ? (
           <button
-            onClick={() => navigate('home')}
+            onClick={() => navigate('today')}
             className="w-full h-13 min-h-[50px] bg-gradient-to-r from-[#6366F1] to-[#8B5CF6] hover:opacity-95 text-white font-bold rounded-2xl text-xs sm:text-sm tracking-wide shadow-lg shadow-indigo-500/25 flex items-center justify-center gap-2 active:scale-[0.97] transition-all cursor-pointer"
           >
             <span>Continue to Dashboard</span>
@@ -218,7 +218,7 @@ export const RegisterPasskeyScreen: React.FC<RegisterPasskeyScreenProps> = ({
         {stage !== 'success' && (
           <div className="flex justify-center">
             <button
-              onClick={() => navigate('home')}
+              onClick={() => navigate('today')}
               className="text-xs font-bold text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-colors cursor-pointer"
             >
               Skip for now &rarr;

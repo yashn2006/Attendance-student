@@ -21,9 +21,9 @@ export async function saveFullAppState(state: Partial<SavedAppState>): Promise<v
   try {
     const existing = (await loadFullAppState()) || ({} as Partial<SavedAppState>);
     const merged: SavedAppState = {
-      activeScreen: state.activeScreen || existing.activeScreen || 'home',
+      activeScreen: state.activeScreen || existing.activeScreen || 'today',
       isDarkMode: state.isDarkMode ?? existing.isDarkMode ?? false,
-      markedLectures: state.markedLectures || existing.markedLectures || ['lec-1'],
+      markedLectures: state.markedLectures || existing.markedLectures || [],
       offlineQueue: state.offlineQueue || existing.offlineQueue || [],
       selectedSemester: state.selectedSemester || existing.selectedSemester || 'Sem 6',
       formDrafts: state.formDrafts || existing.formDrafts || {},
