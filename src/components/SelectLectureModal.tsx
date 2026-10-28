@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ActiveSession, getStudentActiveSessions } from '../lib/supabase';
 import { X, QrCode, Clock, Sparkles, ChevronRight, User, RefreshCw, AlertCircle } from 'lucide-react';
@@ -24,6 +24,11 @@ function formatWindowEnd(iso: string): string {
   return `ends ${endTimeFormatter.format(date)}`;
 }
 
+function windowEndMs(iso: string): number {
+  const time = new Date(iso).getTime();
+  return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time;
+}
+
 export const SelectLectureModal: React.FC<SelectLectureModalProps> = ({
   isOpen,
   onClose,
@@ -33,6 +38,7 @@ export const SelectLectureModal: React.FC<SelectLectureModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
 
   const loadSessions = useCallback(async (showLoading: boolean) => {
     if (showLoading) setLoading(true);
@@ -51,6 +57,23 @@ export const SelectLectureModal: React.FC<SelectLectureModalProps> = ({
       setHasLoaded(true);
     }
   }, []);
+
+  // Tick every second so already-expired sessions drop out without a refetch.
+  useEffect(() => {
+    if (!isOpen) return;
+
+    setNow(Date.now());
+    const tick = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(tick);
+  }, [isOpen]);
+
+  const visibleSessions = useMemo(
+    () =>
+      sessions
+        .filter((session) => !(windowEndMs(session.window_end) <= now))
+        .sort((a, b) => windowEndMs(a.window_end) - windowEndMs(b.window_end)),
+    [sessions, now],
+  );
 
   useEffect(() => {
     if (!isOpen) return;
@@ -96,7 +119,8 @@ export const SelectLectureModal: React.FC<SelectLectureModalProps> = ({
 
   const showInitialLoading = loading && !hasLoaded;
   const showError = Boolean(error) && !showInitialLoading;
-  const showEmpty = !showInitialLoading && !error && hasLoaded && sessions.length === 0;
+  const showEmpty =
+    !showInitialLoading && !error && hasLoaded && visibleSessions.length === 0;
 
   return (
     <AnimatePresence>
@@ -160,7 +184,7 @@ export const SelectLectureModal: React.FC<SelectLectureModalProps> = ({
             <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400 px-1 flex items-center justify-between">
               <span>Live sessions</span>
               <span className="text-indigo-600 dark:text-indigo-400 font-mono text-[10px]">
-                {sessions.length} SESSIONS OPEN
+                {visibleSessions.length} SESSIONS OPEN
               </span>
             </div>
 
@@ -211,7 +235,7 @@ export const SelectLectureModal: React.FC<SelectLectureModalProps> = ({
 
             {!showInitialLoading &&
               !showError &&
-              sessions.map((session) => {
+              visibleSessions.map((session) => {
                 const windowEnd = formatWindowEnd(session.window_end);
 
                 return (
