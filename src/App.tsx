@@ -16,7 +16,7 @@ import { SelectLectureModal } from './components/SelectLectureModal';
 import { PageSkeleton } from './components/PageSkeleton';
 import { Toast } from './components/Toast';
 import { IOSPwaInstallGate } from './components/IOSPwaInstallGate';
-import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { supabase, isSupabaseConfigured, type ActiveSession } from './lib/supabase';
 import { getNotifications } from './lib/studentApi';
 import { loadFullAppState, saveFullAppState } from './lib/appStatePersistence';
 import { motion, AnimatePresence } from 'motion/react';
@@ -69,7 +69,6 @@ const RESTORABLE_SCREENS: ScreenId[] = [
 export function App() {
   const [activeScreen, setActiveScreen] = useState<ScreenId>('auth_loading');
   const [student, setStudent] = useState<StudentProfile | null>(null);
-  const [lectures] = useState<Lecture[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
 
   const refreshUnreadCount = useCallback(async () => {
@@ -198,7 +197,23 @@ export function App() {
     });
   };
 
-  const handleSelectAndScan = (lecture: Lecture) => {
+  const handleSelectAndScan = (session: ActiveSession) => {
+    const lecture: Lecture = {
+      id: session.session_id,
+      code: session.class_section || '',
+      title: session.class_name,
+      professor: session.teacher_name,
+      professorAvatar: '',
+      room: session.class_section || '',
+      building: '',
+      startTime: session.window_start,
+      endTime: session.window_end,
+      duration: '',
+      status: 'current',
+      attendanceStatus: 'live',
+      credits: 0,
+      attendancePercentage: 0,
+    };
     setSelectedLecture(lecture);
     setIsSelectLectureOpen(false);
     setIsScannerOpen(true);
@@ -471,9 +486,7 @@ export function App() {
         <SelectLectureModal
           isOpen={isSelectLectureOpen}
           onClose={() => setIsSelectLectureOpen(false)}
-          lectures={lectures}
-          selectedLecture={selectedLecture}
-          onSelectAndScan={handleSelectAndScan}
+          onSelectSession={handleSelectAndScan}
         />
 
         {/* Modal 2: QR Camera Attendance Scanner Modal */}
