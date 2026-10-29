@@ -1,6 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ActiveSession, getStudentActiveSessions } from '../lib/supabase';
+import {
+  filterLiveSessions,
+  formatWindowEnd,
+  LIVE_SESSION_POLL_MS,
+} from '../lib/liveSessions';
 import { X, QrCode, Clock, Sparkles, ChevronRight, User, RefreshCw, AlertCircle } from 'lucide-react';
 
 interface SelectLectureModalProps {
@@ -9,25 +14,7 @@ interface SelectLectureModalProps {
   onSelectSession: (session: ActiveSession) => void;
 }
 
-const POLL_INTERVAL_MS = 15000;
-
-const endTimeFormatter = new Intl.DateTimeFormat('en-IN', {
-  hour: 'numeric',
-  minute: '2-digit',
-  hour12: true,
-  timeZone: 'Asia/Kolkata',
-});
-
-function formatWindowEnd(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return '';
-  return `ends ${endTimeFormatter.format(date)}`;
-}
-
-function windowEndMs(iso: string): number {
-  const time = new Date(iso).getTime();
-  return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time;
-}
+const POLL_INTERVAL_MS = LIVE_SESSION_POLL_MS;
 
 export const SelectLectureModal: React.FC<SelectLectureModalProps> = ({
   isOpen,
@@ -68,10 +55,7 @@ export const SelectLectureModal: React.FC<SelectLectureModalProps> = ({
   }, [isOpen]);
 
   const visibleSessions = useMemo(
-    () =>
-      sessions
-        .filter((session) => !(windowEndMs(session.window_end) <= now))
-        .sort((a, b) => windowEndMs(a.window_end) - windowEndMs(b.window_end)),
+    () => filterLiveSessions(sessions, now),
     [sessions, now],
   );
 

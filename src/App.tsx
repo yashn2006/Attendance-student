@@ -16,9 +16,9 @@ import { SelectLectureModal } from './components/SelectLectureModal';
 import { PageSkeleton } from './components/PageSkeleton';
 import { Toast } from './components/Toast';
 import { IOSPwaInstallGate } from './components/IOSPwaInstallGate';
-import { supabase, isSupabaseConfigured, type ActiveSession } from './lib/supabase';
-import { getNotifications } from './lib/studentApi';
-import { loadFullAppState, saveFullAppState } from './lib/appStatePersistence';
+import { supabase, isSupabaseConfigured, type ActiveSession, cacheStudent, clearCachedStudent } from './lib/supabase';
+import { getNotifications, getStudentProfile, type StudentProfileRow } from './lib/studentApi';
+import { loadFullAppState, saveFullAppState, clearFullAppState } from './lib/appStatePersistence';
 import { motion, AnimatePresence } from 'motion/react';
 
 // Core Screens loaded eagerly for instant interactive boot
@@ -69,7 +69,12 @@ const RESTORABLE_SCREENS: ScreenId[] = [
 export function App() {
   const [activeScreen, setActiveScreen] = useState<ScreenId>('auth_loading');
   const [student, setStudent] = useState<StudentProfile | null>(null);
+  const [profile, setProfile] = useState<StudentProfileRow | null>(null);
+  const [isProfileLoading, setIsProfileLoading] = useState(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
+  const profileRequestRef = useRef(0);
+  const persistenceSuspendedRef = useRef(false);
 
   const refreshUnreadCount = useCallback(async () => {
     if (!isSupabaseConfigured) {
@@ -99,17 +104,73 @@ export function App() {
     }
   }, [activeScreen, refreshUnreadCount]);
 
+  const loadStudentProfile = useCallback(async () => {
+    const requestId = profileRequestRef.current + 1;
+    profileRequestRef.current = requestId;
+    setIsProfileLoading(true);
+    setProfileError(null);
+
+    const { data, error } = await getStudentProfile();
+    if (profileRequestRef.current !== requestId) return;
+
+    if (error) {
+      setProfile(null);
+      setProfileError(error.message || 'Failed to load your profile.');
+    } else if (!data) {
+      setProfile(null);
+      setProfileError('No student profile found for this account.');
+    } else {
+      setProfile(data);
+      cacheStudent({
+        id: data.id,
+        enrollment_no: data.enrollment_no,
+        name: data.name,
+      });
+    }
+
+    setIsProfileLoading(false);
+  }, []);
+
+  const resetAccountState = useCallback(async (suspendPersistence = false) => {
+    profileRequestRef.current += 1;
+    persistenceSuspendedRef.current = suspendPersistence;
+    setStudent(null);
+    setProfile(null);
+    setProfileError(null);
+    setIsProfileLoading(false);
+    setUnreadCount(0);
+    setSelectedLecture(null);
+    setMarkedLectures([]);
+    setOfflineQueue([]);
+    clearCachedStudent();
+    await clearFullAppState();
+  }, []);
+
   useEffect(() => {
     const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
-        void refreshUnreadCount();
+      if (event === 'SIGNED_IN') {
+        void (async () => {
+          await resetAccountState();
+          await loadStudentProfile();
+          await refreshUnreadCount();
+        })();
+      } else if (event === 'SIGNED_OUT') {
+        void resetAccountState(true);
+      }
+    });
+
+    supabase.auth.getSession().then(({ data }) => {
+      if (data.session) {
+        void loadStudentProfile();
+      } else {
+        setIsProfileLoading(false);
       }
     });
 
     return () => {
       authListener.subscription.unsubscribe();
     };
-  }, [refreshUnreadCount]);
+  }, [loadStudentProfile, refreshUnreadCount, resetAccountState]);
 
   // Restore full state from IndexedDB / LocalStorage on app boot
   useEffect(() => {
@@ -221,7 +282,8 @@ export function App() {
 
   // Save full state whenever key state changes
   useEffect(() => {
-    if (activeScreen !== 'auth_loading' && activeScreen !== 'splash') {
+    if (persistenceSuspendedRef.current) return;
+    if (RESTORABLE_SCREENS.includes(activeScreen)) {
       saveFullAppState({
         activeScreen,
         isDarkMode,
@@ -340,7 +402,8 @@ export function App() {
 
         {/* Header Bar */}
         <Header
-          student={studentProfile}
+          profile={profile}
+          isProfileLoading={isProfileLoading}
           activeScreen={activeScreen}
           navigate={handleNavigate}
           unreadNotificationsCount={unreadCount}
@@ -461,7 +524,15 @@ export function App() {
                   />
                 )}
 
-                {activeScreen === 'profile' && <ProfileScreen navigate={handleNavigate} />}
+                {activeScreen === 'profile' && (
+                  <ProfileScreen
+                    navigate={handleNavigate}
+                    profile={profile}
+                    profileLoading={isProfileLoading}
+                    profileError={profileError}
+                    onReloadProfile={loadStudentProfile}
+                  />
+                )}
 
                 {activeScreen === 'settings' && (
                   <SettingsScreen
@@ -474,7 +545,6 @@ export function App() {
                     onSyncNow={handleSyncNow}
                     isDarkMode={isDarkMode}
                     onToggleDarkMode={toggleDarkMode}
-                    isLiveSessionActive={true}
                   />
                 )}
               </Suspense>

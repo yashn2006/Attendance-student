@@ -1,10 +1,11 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
   BookOpen,
   CheckCircle2,
   KeyRound,
+  Lock,
   LogOut,
   Mail,
   Settings,
@@ -14,42 +15,31 @@ import {
 } from 'lucide-react';
 import { ScreenId } from '../types';
 import { clearCachedStudent, supabase } from '../lib/supabase';
-import { getStudentProfile, type StudentProfileRow } from '../lib/studentApi';
+import type { StudentProfileRow } from '../lib/studentApi';
+import { clearFullAppState } from '../lib/appStatePersistence';
+import { formatSessionEndTime, useLiveSessionLock } from '../lib/liveSessions';
 
 interface ProfileScreenProps {
   navigate: (screen: ScreenId) => void;
+  profile: StudentProfileRow | null;
+  profileLoading: boolean;
+  profileError: string | null;
+  onReloadProfile: () => Promise<void>;
 }
 
-export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigate }) => {
-  const [profile, setProfile] = useState<StudentProfileRow | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export const ProfileScreen: React.FC<ProfileScreenProps> = ({
+  navigate,
+  profile,
+  profileLoading,
+  profileError,
+  onReloadProfile,
+}) => {
   const [loggingOut, setLoggingOut] = useState(false);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
-    const { data, error: fetchError } = await getStudentProfile();
-
-    if (fetchError) {
-      setError(fetchError.message || 'Failed to load your profile.');
-      setProfile(null);
-    } else if (!data) {
-      setError('No student profile found for this account.');
-      setProfile(null);
-    } else {
-      setProfile(data);
-    }
-
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const { isLocked, lockedUntil } = useLiveSessionLock();
 
   const handleLogout = async () => {
+    if (isLocked || loggingOut) return;
+
     setLoggingOut(true);
     try {
       await supabase.auth.signOut();
@@ -57,6 +47,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigate }) => {
       /* still clear local state and leave */
     } finally {
       clearCachedStudent();
+      await clearFullAppState();
       setLoggingOut(false);
       navigate('welcome');
     }
@@ -72,7 +63,9 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigate }) => {
     .filter(Boolean)
     .slice(0, 2)
     .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('') || 'ST';
+    .join('');
+
+  const lockedUntilTime = lockedUntil ? formatSessionEndTime(lockedUntil) : '';
 
   return (
     <div className="space-y-5 pb-6 max-w-2xl mx-auto px-4 sm:px-6 pt-2">
@@ -104,7 +97,7 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigate }) => {
         </button>
       </div>
 
-      {loading ? (
+      {profileLoading ? (
         <div className="space-y-3">
           <div className="bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-6 space-y-4 animate-pulse">
             <div className="flex items-center gap-4">
@@ -118,15 +111,15 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigate }) => {
             <div className="h-12 w-full rounded-2xl bg-slate-100 dark:bg-slate-800/60" />
           </div>
         </div>
-      ) : error ? (
+      ) : profileError ? (
         <div className="bg-white dark:bg-slate-900 rounded-3xl border border-rose-200 dark:border-rose-900/50 p-8 text-center space-y-3">
           <AlertCircle className="w-9 h-9 text-rose-500 mx-auto" />
           <h3 className="text-sm font-black text-slate-900 dark:text-white">
             Could not load your profile
           </h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{error}</p>
+          <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">{profileError}</p>
           <button
-            onClick={() => void load()}
+            onClick={() => void onReloadProfile()}
             className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-xs font-black shadow-md shadow-indigo-500/25 active:scale-95 transition-transform cursor-pointer"
           >
             Retry
@@ -224,12 +217,18 @@ export const ProfileScreen: React.FC<ProfileScreenProps> = ({ navigate }) => {
 
       <button
         onClick={() => void handleLogout()}
-        disabled={loggingOut}
-        className="w-full bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-950/60 text-rose-600 dark:text-rose-400 font-black py-3.5 rounded-2xl text-xs flex items-center justify-center gap-2 transition-all border border-rose-200 dark:border-rose-900/50 cursor-pointer shadow-2xs active:scale-98 disabled:opacity-60"
+        disabled={loggingOut || isLocked}
+        className="w-full bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-950/60 text-rose-600 dark:text-rose-400 font-black py-3.5 rounded-2xl text-xs flex items-center justify-center gap-2 transition-all border border-rose-200 dark:border-rose-900/50 cursor-pointer shadow-2xs active:scale-98 disabled:opacity-60 disabled:cursor-not-allowed"
       >
-        <LogOut className="w-4 h-4" />
+        {isLocked ? <Lock className="w-4 h-4" /> : <LogOut className="w-4 h-4" />}
         <span>{loggingOut ? 'Signing out...' : 'Log Out of Campus OS'}</span>
       </button>
+
+      {isLocked && lockedUntilTime && (
+        <p className="text-[11px] font-bold text-amber-700 dark:text-amber-300 text-center leading-relaxed">
+          Logout is locked while a class session is live (until {lockedUntilTime})
+        </p>
+      )}
     </div>
   );
 };

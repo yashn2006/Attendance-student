@@ -25,6 +25,9 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { getPersistentDeviceId } from '../lib/deviceId';
+import { clearCachedStudent, supabase } from '../lib/supabase';
+import { clearFullAppState } from '../lib/appStatePersistence';
+import { formatSessionEndTime, useLiveSessionLock } from '../lib/liveSessions';
 
 interface SettingsScreenProps {
   navigate: (screen: ScreenId) => void;
@@ -36,7 +39,6 @@ interface SettingsScreenProps {
   onSyncNow: () => void;
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
-  isLiveSessionActive?: boolean;
 }
 
 export const SettingsScreen: React.FC<SettingsScreenProps> = ({
@@ -49,9 +51,10 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onSyncNow,
   isDarkMode,
   onToggleDarkMode,
-  isLiveSessionActive = true,
 }) => {
+  const { isLocked, lockedUntil } = useLiveSessionLock();
   const [boundDeviceId, setBoundDeviceId] = useState<string>('binding...');
+  const [loggingOut, setLoggingOut] = useState(false);
   const [biometricsEnabled, setBiometricsEnabled] = useState(true);
   const [livenessLevel, setLivenessLevel] = useState<'high' | 'standard'>('high');
   const [classReminders, setClassReminders] = useState(true);
@@ -68,6 +71,24 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     setCacheClearedMsg(true);
     setTimeout(() => setCacheClearedMsg(false), 2500);
   };
+
+  const handleLogout = async () => {
+    if (isLocked || loggingOut) return;
+
+    setLoggingOut(true);
+    try {
+      await supabase.auth.signOut();
+    } catch {
+      /* still clear local state and leave */
+    } finally {
+      clearCachedStudent();
+      await clearFullAppState();
+      setLoggingOut(false);
+      navigate('welcome');
+    }
+  };
+
+  const lockedUntilTime = lockedUntil ? formatSessionEndTime(lockedUntil) : '';
 
   return (
     <div className="space-y-5 pb-6 max-w-2xl mx-auto px-4 sm:px-6">
@@ -361,7 +382,7 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           Account Security & Session Lock
         </h3>
 
-        {isLiveSessionActive ? (
+        {isLocked && (
           <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-start gap-3">
             <ShieldAlert className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
             <div className="space-y-1">
@@ -369,28 +390,30 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                 Session Soft-Lock Active
               </p>
               <p className="text-[11px] text-amber-800/90 dark:text-amber-300/80 font-medium leading-relaxed">
-                A live attendance window is active for your class ({'CS201 Data Structures'}). Logging out is soft-locked to prevent session tampering during active lectures.
+                Logout is locked while a class session is live
+                {lockedUntilTime ? ` (until ${lockedUntilTime})` : ''}.
               </p>
             </div>
           </div>
-        ) : null}
+        )}
 
         <button
-          onClick={() => {
-            if (isLiveSessionActive) {
-              alert('Soft Session-Lock: Live lecture attendance is currently active for your class. Logging out now will be flagged in portal logs.');
-            } else {
-              navigate('welcome');
-            }
-          }}
-          className={`w-full py-3.5 rounded-xl font-black text-xs flex items-center justify-center gap-2 border transition-all cursor-pointer ${
-            isLiveSessionActive
+          onClick={() => void handleLogout()}
+          disabled={loggingOut || isLocked}
+          className={`w-full py-3.5 rounded-xl font-black text-xs flex items-center justify-center gap-2 border transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
+            isLocked
               ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-slate-200 dark:border-slate-700'
               : 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-900 hover:bg-rose-100'
           }`}
         >
-          {isLiveSessionActive ? <Lock className="w-4 h-4 text-amber-500" /> : <LogOut className="w-4 h-4" />}
-          <span>{isLiveSessionActive ? 'Logout Soft-Locked (Session Active)' : 'Log Out of Student Account'}</span>
+          {isLocked ? <Lock className="w-4 h-4 text-amber-500" /> : <LogOut className="w-4 h-4" />}
+          <span>
+            {loggingOut
+              ? 'Signing out...'
+              : isLocked
+                ? 'Logout Locked (Session Active)'
+                : 'Log Out of Student Account'}
+          </span>
         </button>
       </div>
 

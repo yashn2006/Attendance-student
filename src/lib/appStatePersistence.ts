@@ -56,6 +56,44 @@ export async function saveFullAppState(state: Partial<SavedAppState>): Promise<v
   }
 }
 
+export async function clearFullAppState(): Promise<void> {
+  try {
+    localStorage.removeItem(STATE_KEY);
+  } catch (e) {
+    console.warn('LocalStorage clear error:', e);
+  }
+
+  if (typeof indexedDB === 'undefined') return;
+
+  await new Promise<void>((resolve) => {
+    const req = indexedDB.open(DB_NAME, 1);
+    req.onupgradeneeded = () => {
+      if (!req.result.objectStoreNames.contains(STORE_NAME)) {
+        req.result.createObjectStore(STORE_NAME);
+      }
+    };
+    req.onsuccess = () => {
+      const db = req.result;
+      try {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        tx.objectStore(STORE_NAME).delete(STATE_KEY);
+        tx.oncomplete = () => {
+          db.close();
+          resolve();
+        };
+        tx.onerror = () => {
+          db.close();
+          resolve();
+        };
+      } catch {
+        db.close();
+        resolve();
+      }
+    };
+    req.onerror = () => resolve();
+  });
+}
+
 export async function loadFullAppState(): Promise<SavedAppState | null> {
   // 1. Try LocalStorage
   try {
