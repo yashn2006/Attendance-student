@@ -8,8 +8,18 @@ import {
   User,
 } from 'lucide-react';
 import { getTimetable, type TimetableRow } from '../lib/studentApi';
+import { useLiveSessionLock } from '../lib/liveSessions';
+import {
+  StackedHeroCards,
+  type HeroCardStatusTone,
+  type StackedHeroCardData,
+} from '../components/StackedHeroCards';
 
 const warnedStatuses = new Set<string>();
+
+interface TodayScreenProps {
+  openSelectLectureModal: () => void;
+}
 
 interface StatusMeta {
   label: string;
@@ -54,6 +64,25 @@ const formatTime = (value: string | null): string => {
   return value.slice(0, 5);
 };
 
+const toMinutes = (value: string | null): number | null => {
+  if (!value) return null;
+  const [hours, minutes] = value.split(':').map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return hours * 60 + minutes;
+};
+
+const getNowMinutes = (): number => {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    timeZone: 'Asia/Kolkata',
+  }).formatToParts(new Date());
+  const hour = Number(parts.find((part) => part.type === 'hour')?.value ?? 0);
+  const minute = Number(parts.find((part) => part.type === 'minute')?.value ?? 0);
+  return hour * 60 + minute;
+};
+
 const formatMarkedAt = (value: string): string => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -79,11 +108,13 @@ const isBreakRow = (row: TimetableRow): boolean => {
   return slotType.includes('break') || label.includes('break');
 };
 
-export const TodayScreen: React.FC = () => {
+export const TodayScreen: React.FC<TodayScreenProps> = ({ openSelectLectureModal }) => {
   const [rows, setRows] = useState<TimetableRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [initialCardIndex, setInitialCardIndex] = useState(0);
+  const { isLocked: hasLiveSession } = useLiveSessionLock();
 
   const load = useCallback(async (mode: 'initial' | 'refresh' = 'initial') => {
     if (mode === 'refresh') {
@@ -117,6 +148,72 @@ export const TodayScreen: React.FC = () => {
 
   const todayLabel = useMemo(() => getTodayLabel(), []);
 
+  const lectureRows = useMemo(
+    () => sortedRows.filter((row) => !isBreakRow(row)),
+    [sortedRows],
+  );
+
+  const nowMinutes = getNowMinutes();
+
+  const heroCards = useMemo<StackedHeroCardData[]>(
+    () =>
+      lectureRows.map((row) => {
+        const normalized = (row.status ?? '').trim().toLowerCase();
+        const isMarked = normalized === 'present' || normalized === 'manual';
+        const startMinutes = toMinutes(row.start_time);
+        const hasStarted = startMinutes !== null && startMinutes <= nowMinutes;
+
+        let statusLabel = 'NOT MARKED';
+        let statusTone: HeroCardStatusTone = 'not-marked';
+
+        if (isMarked) {
+          statusLabel = 'MARKED';
+          statusTone = 'marked';
+        } else if (normalized === 'not_held') {
+          statusLabel = hasStarted ? 'NO SESSION' : 'UPCOMING';
+          statusTone = 'upcoming';
+        }
+
+        return {
+          id: row.slot_id,
+          title: row.subject_name || 'Lecture',
+          subtitle: `Period ${row.period_number} · ${formatTime(row.start_time)} - ${formatTime(row.end_time)}`,
+          teacher: row.teacher_name,
+          detail: row.room,
+          statusLabel,
+          statusTone,
+          canMarkAttendance: !isMarked && hasLiveSession,
+        };
+      }),
+    [lectureRows, nowMinutes, hasLiveSession],
+  );
+
+  useEffect(() => {
+    if (lectureRows.length === 0) {
+      setInitialCardIndex(0);
+      return;
+    }
+
+    const now = getNowMinutes();
+    const currentIndex = lectureRows.findIndex((row) => {
+      const start = toMinutes(row.start_time);
+      const end = toMinutes(row.end_time);
+      return start !== null && end !== null && start <= now && now < end;
+    });
+
+    if (currentIndex >= 0) {
+      setInitialCardIndex(currentIndex);
+      return;
+    }
+
+    const nextIndex = lectureRows.findIndex((row) => {
+      const start = toMinutes(row.start_time);
+      return start !== null && start > now;
+    });
+
+    setInitialCardIndex(nextIndex >= 0 ? nextIndex : 0);
+  }, [lectureRows]);
+
   return (
     <div className="space-y-5 pb-6 max-w-2xl mx-auto px-4 sm:px-6 pt-2">
       <div className="flex items-start justify-between gap-3">
@@ -143,6 +240,14 @@ export const TodayScreen: React.FC = () => {
           <span>Refresh</span>
         </button>
       </div>
+
+      {!loading && !error && heroCards.length > 0 && (
+        <StackedHeroCards
+          cards={heroCards}
+          initialIndex={initialCardIndex}
+          onMarkAttendance={openSelectLectureModal}
+        />
+      )}
 
       {loading ? (
         <div className="space-y-3">

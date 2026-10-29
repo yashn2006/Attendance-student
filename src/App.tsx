@@ -479,7 +479,9 @@ export function App() {
 
                 {activeScreen === 'onboarding' && <OnboardingScreen navigate={handleNavigate} />}
 
-                {activeScreen === 'today' && <TodayScreen />}
+                {activeScreen === 'today' && (
+                  <TodayScreen openSelectLectureModal={() => setIsSelectLectureOpen(true)} />
+                )}
 
                 {activeScreen === 'scan' && selectedLecture && (
                   <LiveAttendanceScreen
