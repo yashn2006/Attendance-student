@@ -23,6 +23,7 @@ export interface StackedHeroCardData {
   statusLabel: string;
   statusTone: HeroCardStatusTone;
   canMarkAttendance: boolean;
+  periodNumber?: number;
 }
 
 interface StackedHeroCardsProps {
@@ -31,76 +32,197 @@ interface StackedHeroCardsProps {
   onMarkAttendance: () => void;
 }
 
-interface CardMeta {
+type CardLayout = 'left' | 'right' | 'watermark';
+
+interface CardTheme {
   bgGradient: string;
   borderColor: string;
   titleColor: string;
   subtitleColor: string;
-  badgeBg: string;
-  badgeTextColor: string;
   iconBg: string;
   iconColor: string;
-  ctaBg: string;
+  accentText: string;
   shadow: string;
   illustrationColor: string;
-  iconComponent: React.ReactNode;
+  radius: string;
+  layout: CardLayout;
+  pattern: React.ReactNode;
 }
 
-const getCardMeta = (tone: HeroCardStatusTone): CardMeta => {
-  if (tone === 'marked') {
-    return {
-      bgGradient:
-        'from-[#ECFDF5] via-[#D1FAE5] to-[#A7F3D0] dark:from-[#022C22] dark:via-[#064E3B] dark:to-[#0F172A]',
-      borderColor: 'border-emerald-300 dark:border-emerald-500/60',
-      titleColor: 'text-[#064E3B] dark:text-white',
-      subtitleColor: 'text-[#059669] dark:text-emerald-300',
-      badgeBg: 'bg-emerald-500/15',
-      badgeTextColor: 'text-[#047857] dark:text-emerald-300',
-      iconBg: 'bg-[#10B981]',
-      iconColor: 'text-white',
-      ctaBg:
-        'bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white shadow-lg shadow-emerald-500/30',
-      shadow: 'shadow-[0_12px_30px_-5px_rgba(16,185,129,0.3)]',
-      illustrationColor: 'text-emerald-600/80 dark:text-emerald-300/80',
-      iconComponent: <CheckCircle2 className="w-4.5 h-4.5 stroke-[2.2]" />,
-    };
-  }
-
-  if (tone === 'not-marked') {
-    return {
-      bgGradient:
-        'from-[#FFE4E6] via-[#FECDD3] to-[#FDA4AF] dark:from-[#4C0519] dark:via-[#881337] dark:to-[#0F172A]',
-      borderColor: 'border-rose-300 dark:border-rose-500/60',
-      titleColor: 'text-[#881337] dark:text-white',
-      subtitleColor: 'text-[#E11D48] dark:text-rose-300',
-      badgeBg: 'bg-rose-500/15',
-      badgeTextColor: 'text-[#9F1239] dark:text-rose-300',
-      iconBg: 'bg-[#E11D48]',
-      iconColor: 'text-white',
-      ctaBg:
-        'bg-gradient-to-r from-rose-600 to-pink-600 hover:from-rose-500 hover:to-pink-500 text-white shadow-lg shadow-rose-500/30',
-      shadow: 'shadow-[0_12px_30px_-5px_rgba(225,29,72,0.3)]',
-      illustrationColor: 'text-rose-600/80 dark:text-rose-300/80',
-      iconComponent: <AlertCircle className="w-4.5 h-4.5 stroke-[2.2]" />,
-    };
-  }
-
-  return {
+const THEMES: CardTheme[] = [
+  {
     bgGradient:
-      'from-[#E0E7FF] via-[#C7D2FE] to-[#A5B4FC] dark:from-[#1E1B4B] dark:via-[#312E81] dark:to-[#0F172A]',
-    borderColor: 'border-indigo-300 dark:border-indigo-500/60',
+      'from-[#E0E7FF] via-[#C7D2FE] to-[#DDD6FE] dark:from-[#312E81] dark:via-[#4C1D95] dark:to-[#1E1B4B]',
+    borderColor: 'border-indigo-300/70 dark:border-indigo-400/40',
     titleColor: 'text-[#1E1B4B] dark:text-white',
-    subtitleColor: 'text-[#4F46E5] dark:text-indigo-300',
-    badgeBg: 'bg-indigo-500/15',
-    badgeTextColor: 'text-[#3730A3] dark:text-indigo-300',
-    iconBg: 'bg-[#4F46E5]',
+    subtitleColor: 'text-[#4338CA] dark:text-indigo-200',
+    iconBg: 'bg-indigo-600',
     iconColor: 'text-white',
-    ctaBg:
-      'bg-gradient-to-r from-indigo-600 to-blue-600 hover:from-indigo-500 hover:to-blue-500 text-white shadow-lg shadow-indigo-500/30',
+    accentText: 'text-indigo-700',
     shadow: 'shadow-[0_12px_30px_-5px_rgba(79,70,229,0.3)]',
-    illustrationColor: 'text-indigo-600/80 dark:text-indigo-300/80',
-    iconComponent: <Clock3 className="w-4.5 h-4.5 stroke-[2.2]" />,
-  };
+    illustrationColor: 'text-indigo-600/80 dark:text-indigo-200/80',
+    radius: 'rounded-[28px]',
+    layout: 'left',
+    pattern: (
+      <>
+        <div className="absolute -top-16 -right-12 h-48 w-48 rounded-full bg-indigo-500/20 dark:bg-indigo-200/10" />
+        <div className="absolute -bottom-20 -left-14 h-52 w-52 rounded-full bg-violet-500/20 dark:bg-violet-200/10" />
+        <div className="absolute top-1/2 left-1/3 h-24 w-24 rounded-full bg-white/30 dark:bg-white/5" />
+      </>
+    ),
+  },
+  {
+    bgGradient:
+      'from-[#CCFBF1] via-[#A7F3D0] to-[#6EE7B7] dark:from-[#134E4A] dark:via-[#065F46] dark:to-[#022C22]',
+    borderColor: 'border-teal-300/70 dark:border-teal-400/40',
+    titleColor: 'text-[#134E4A] dark:text-white',
+    subtitleColor: 'text-[#0F766E] dark:text-teal-200',
+    iconBg: 'bg-teal-600',
+    iconColor: 'text-white',
+    accentText: 'text-teal-700',
+    shadow: 'shadow-[0_12px_30px_-5px_rgba(13,148,136,0.3)]',
+    illustrationColor: 'text-teal-600/80 dark:text-teal-200/80',
+    radius: 'rounded-[32px]',
+    layout: 'right',
+    pattern: (
+      <>
+        <div
+          className="absolute inset-0 dark:hidden"
+          style={{
+            backgroundImage:
+              'repeating-linear-gradient(45deg, rgba(13,148,136,0.16) 0px, rgba(13,148,136,0.16) 10px, transparent 10px, transparent 22px)',
+          }}
+        />
+        <div
+          className="absolute inset-0 hidden dark:block"
+          style={{
+            backgroundImage:
+              'repeating-linear-gradient(45deg, rgba(255,255,255,0.10) 0px, rgba(255,255,255,0.10) 10px, transparent 10px, transparent 22px)',
+          }}
+        />
+      </>
+    ),
+  },
+  {
+    bgGradient:
+      'from-[#FFEDD5] via-[#FECDD3] to-[#FDA4AF] dark:from-[#9A3412] dark:via-[#9F1239] dark:to-[#4C0519]',
+    borderColor: 'border-orange-300/70 dark:border-orange-400/40',
+    titleColor: 'text-[#7C2D12] dark:text-white',
+    subtitleColor: 'text-[#C2410C] dark:text-orange-200',
+    iconBg: 'bg-orange-600',
+    iconColor: 'text-white',
+    accentText: 'text-orange-700',
+    shadow: 'shadow-[0_12px_30px_-5px_rgba(234,88,12,0.3)]',
+    illustrationColor: 'text-orange-700/20 dark:text-white/15',
+    radius: 'rounded-[24px]',
+    layout: 'watermark',
+    pattern: (
+      <svg
+        className="absolute inset-x-0 bottom-0 h-24 w-full text-orange-500/20 dark:text-orange-200/15"
+        viewBox="0 0 400 100"
+        preserveAspectRatio="none"
+        fill="currentColor"
+        aria-hidden="true"
+      >
+        <path d="M0,54 C60,14 120,94 200,54 C280,14 340,94 400,54 L400,100 L0,100 Z" />
+        <path d="M0,74 C70,40 130,108 210,74 C290,40 340,108 400,74 L400,100 L0,100 Z" opacity="0.7" />
+      </svg>
+    ),
+  },
+  {
+    bgGradient:
+      'from-[#E0F2FE] via-[#BAE6FD] to-[#93C5FD] dark:from-[#0C4A6E] dark:via-[#075985] dark:to-[#0F172A]',
+    borderColor: 'border-sky-300/70 dark:border-sky-400/40',
+    titleColor: 'text-[#0C4A6E] dark:text-white',
+    subtitleColor: 'text-[#0369A1] dark:text-sky-200',
+    iconBg: 'bg-sky-600',
+    iconColor: 'text-white',
+    accentText: 'text-sky-700',
+    shadow: 'shadow-[0_12px_30px_-5px_rgba(2,132,199,0.3)]',
+    illustrationColor: 'text-sky-600/80 dark:text-sky-200/80',
+    radius: 'rounded-[28px]',
+    layout: 'left',
+    pattern: (
+      <>
+        <div
+          className="absolute inset-0 dark:hidden"
+          style={{
+            backgroundImage:
+              'radial-gradient(rgba(2,132,199,0.22) 1.5px, transparent 1.6px)',
+            backgroundSize: '16px 16px',
+          }}
+        />
+        <div
+          className="absolute inset-0 hidden dark:block"
+          style={{
+            backgroundImage:
+              'radial-gradient(rgba(255,255,255,0.14) 1.5px, transparent 1.6px)',
+            backgroundSize: '16px 16px',
+          }}
+        />
+      </>
+    ),
+  },
+  {
+    bgGradient:
+      'from-[#FAE8FF] via-[#F0ABFC] to-[#D8B4FE] dark:from-[#701A75] dark:via-[#6B21A8] dark:to-[#3B0764]',
+    borderColor: 'border-fuchsia-300/70 dark:border-fuchsia-400/40',
+    titleColor: 'text-[#701A75] dark:text-white',
+    subtitleColor: 'text-[#A21CAF] dark:text-fuchsia-200',
+    iconBg: 'bg-fuchsia-600',
+    iconColor: 'text-white',
+    accentText: 'text-fuchsia-700',
+    shadow: 'shadow-[0_12px_30px_-5px_rgba(192,38,211,0.3)]',
+    illustrationColor: 'text-fuchsia-600/80 dark:text-fuchsia-200/80',
+    radius: 'rounded-[32px]',
+    layout: 'right',
+    pattern: (
+      <svg
+        className="absolute inset-0 h-full w-full text-fuchsia-600/20 dark:text-white/10"
+        viewBox="0 0 400 224"
+        preserveAspectRatio="none"
+        fill="none"
+        stroke="currentColor"
+        aria-hidden="true"
+      >
+        <circle cx="330" cy="40" r="70" strokeWidth="2" />
+        <circle cx="300" cy="70" r="92" strokeWidth="2" />
+        <circle cx="70" cy="190" r="58" strokeWidth="2" />
+        <circle cx="40" cy="160" r="82" strokeWidth="2" />
+      </svg>
+    ),
+  },
+];
+
+const getStatusChipClasses = (tone: HeroCardStatusTone): string => {
+  if (tone === 'marked') {
+    return 'bg-white/90 text-emerald-700 border-white/60';
+  }
+  if (tone === 'not-marked') {
+    return 'bg-white/90 text-rose-700 border-white/60';
+  }
+  return 'bg-white/90 text-slate-600 border-white/60';
+};
+
+const getStatusIcon = (tone: HeroCardStatusTone): React.ReactNode => {
+  if (tone === 'marked') {
+    return <CheckCircle2 className="w-4.5 h-4.5 stroke-[2.2]" />;
+  }
+  if (tone === 'not-marked') {
+    return <AlertCircle className="w-4.5 h-4.5 stroke-[2.2]" />;
+  }
+  return <Clock3 className="w-4.5 h-4.5 stroke-[2.2]" />;
+};
+
+const getThemeForCard = (
+  card: StackedHeroCardData,
+  fallbackIndex: number,
+): CardTheme => {
+  const rawIndex =
+    typeof card.periodNumber === 'number'
+      ? card.periodNumber - 1
+      : fallbackIndex;
+  return THEMES[((rawIndex % THEMES.length) + THEMES.length) % THEMES.length];
 };
 
 export const StackedHeroCards: React.FC<StackedHeroCardsProps> = React.memo(
@@ -170,8 +292,16 @@ export const StackedHeroCards: React.FC<StackedHeroCardsProps> = React.memo(
               .slice()
               .reverse()
               .map(({ card, offsetIndex, config, cardIndex }) => {
-                const meta = getCardMeta(card.statusTone);
+                const theme = getThemeForCard(card, cardIndex);
+                const statusIcon = getStatusIcon(card.statusTone);
                 const isFront = offsetIndex === 0;
+                const iconTile = (
+                  <div
+                    className={`w-9.5 h-9.5 rounded-xl ${theme.iconBg} ${theme.iconColor} flex items-center justify-center shadow-xs shrink-0`}
+                  >
+                    {statusIcon}
+                  </div>
+                );
 
                 return (
                   <motion.div
@@ -224,38 +354,75 @@ export const StackedHeroCards: React.FC<StackedHeroCardsProps> = React.memo(
                     }}
                     transition={{ type: 'spring', stiffness: 400, damping: 32 }}
                     style={{ zIndex: config.zIndex, transformOrigin: 'center center' }}
-                    className={`absolute top-0 left-0 w-[92%] sm:w-[88%] h-[224px] rounded-[24px] bg-gradient-to-br ${meta.bgGradient} p-4 sm:p-5 ${meta.shadow} border ${meta.borderColor} flex flex-col justify-between overflow-hidden cursor-grab active:cursor-grabbing box-border transform-gpu will-change-[transform,opacity]`}
+                    className={`absolute top-0 left-0 w-[92%] sm:w-[88%] h-[224px] ${theme.radius} bg-gradient-to-br ${theme.bgGradient} p-4 sm:p-5 ${theme.shadow} border ${theme.borderColor} flex flex-col justify-between overflow-hidden cursor-grab active:cursor-grabbing box-border transform-gpu will-change-[transform,opacity]`}
                   >
-                    <div className="flex justify-between items-center gap-2.5 z-10 w-full min-w-0">
-                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                        <div
-                          className={`w-9.5 h-9.5 rounded-xl ${meta.iconBg} ${meta.iconColor} flex items-center justify-center shadow-xs shrink-0`}
-                        >
-                          {meta.iconComponent}
-                        </div>
-
-                        <div className="min-w-0 flex-1">
-                          <h3
-                            className={`text-[16px] sm:text-[18px] font-black tracking-tight leading-tight truncate ${meta.titleColor}`}
-                          >
-                            {card.title}
-                          </h3>
-                          <p
-                            className={`text-[12px] sm:text-[13px] font-bold truncate ${meta.subtitleColor} mt-0.5`}
-                          >
-                            {card.subtitle}
-                          </p>
-                        </div>
-                      </div>
-
-                      <span
-                        className={`px-2.5 py-1 rounded-full text-[10.5px] sm:text-[11px] font-black uppercase tracking-wider whitespace-nowrap shrink-0 ${meta.badgeBg} ${meta.badgeTextColor}`}
-                      >
-                        {card.statusLabel}
-                      </span>
+                    <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
+                      {theme.pattern}
                     </div>
 
-                    <div className="flex justify-between items-center gap-2 z-10 my-1 w-full min-w-0">
+                    {theme.layout === 'watermark' && (
+                      <div
+                        className={`pointer-events-none absolute -bottom-6 -right-4 z-0 ${theme.illustrationColor}`}
+                      >
+                        {React.cloneElement(
+                          statusIcon as React.ReactElement<{ className?: string }>,
+                          { className: 'w-40 h-40 stroke-[1.5]' },
+                        )}
+                      </div>
+                    )}
+
+                    {theme.layout === 'right' ? (
+                      <div className="relative z-10 flex justify-between items-start gap-2.5 w-full min-w-0">
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-[10.5px] sm:text-[11px] font-black uppercase tracking-wider whitespace-nowrap shrink-0 border shadow-sm ${getStatusChipClasses(card.statusTone)}`}
+                        >
+                          {card.statusLabel}
+                        </span>
+
+                        <div className="flex items-center justify-end gap-2.5 min-w-0 flex-1">
+                          <div className="min-w-0 flex-1 text-right">
+                            <h3
+                              className={`text-[16px] sm:text-[18px] font-black tracking-tight leading-tight truncate ${theme.titleColor}`}
+                            >
+                              {card.title}
+                            </h3>
+                            <p
+                              className={`text-[12px] sm:text-[13px] font-bold truncate ${theme.subtitleColor} mt-0.5`}
+                            >
+                              {card.subtitle}
+                            </p>
+                          </div>
+                          {iconTile}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="relative z-10 flex justify-between items-center gap-2.5 w-full min-w-0">
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                          {iconTile}
+
+                          <div className="min-w-0 flex-1">
+                            <h3
+                              className={`text-[16px] sm:text-[18px] font-black tracking-tight leading-tight truncate ${theme.titleColor}`}
+                            >
+                              {card.title}
+                            </h3>
+                            <p
+                              className={`text-[12px] sm:text-[13px] font-bold truncate ${theme.subtitleColor} mt-0.5`}
+                            >
+                              {card.subtitle}
+                            </p>
+                          </div>
+                        </div>
+
+                        <span
+                          className={`px-2.5 py-1 rounded-full text-[10.5px] sm:text-[11px] font-black uppercase tracking-wider whitespace-nowrap shrink-0 border shadow-sm ${getStatusChipClasses(card.statusTone)}`}
+                        >
+                          {card.statusLabel}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="relative z-10 flex justify-between items-center gap-2 my-1 w-full min-w-0">
                       <div className="space-y-1.5 min-w-0 flex-1 pr-1">
                         {card.teacher && (
                           <p className="text-[14.5px] sm:text-[16px] font-black text-[#0F172A] dark:text-slate-100 leading-tight flex items-center gap-1.5 min-w-0">
@@ -271,20 +438,22 @@ export const StackedHeroCards: React.FC<StackedHeroCardsProps> = React.memo(
                         )}
                       </div>
 
-                      <div className="shrink-0 relative w-16 h-16 flex items-center justify-center">
-                        <div className="absolute inset-0 rounded-full bg-white/35 dark:bg-white/5 blur-[2px]" />
-                        <div
-                          className={`relative w-11 h-11 rounded-2xl bg-white/70 dark:bg-slate-800/80 border ${meta.borderColor} flex items-center justify-center rotate-[-6deg] shadow-lg ${meta.illustrationColor}`}
-                        >
-                          {React.cloneElement(
-                            meta.iconComponent as React.ReactElement<{ className?: string }>,
-                            { className: 'w-6 h-6 stroke-[2.4]' },
-                          )}
+                      {theme.layout !== 'watermark' && (
+                        <div className="shrink-0 relative w-16 h-16 flex items-center justify-center">
+                          <div className="absolute inset-0 rounded-full bg-white/35 dark:bg-white/5 blur-[2px]" />
+                          <div
+                            className={`relative w-11 h-11 rounded-2xl bg-white/70 dark:bg-slate-800/80 border ${theme.borderColor} flex items-center justify-center rotate-[-6deg] shadow-lg ${theme.illustrationColor}`}
+                          >
+                            {React.cloneElement(
+                              statusIcon as React.ReactElement<{ className?: string }>,
+                              { className: 'w-6 h-6 stroke-[2.4]' },
+                            )}
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
 
-                    <div className="flex justify-end items-center gap-2 z-10 pt-1 w-full min-w-0">
+                    <div className="relative z-10 flex justify-end items-center gap-2 pt-1 w-full min-w-0">
                       {isFront && card.canMarkAttendance && (
                         <button
                           type="button"
@@ -292,7 +461,7 @@ export const StackedHeroCards: React.FC<StackedHeroCardsProps> = React.memo(
                             e.stopPropagation();
                             onMarkAttendance();
                           }}
-                          className={`h-11 px-4 sm:px-5 rounded-xl text-[13px] sm:text-[14px] font-black active:scale-95 transition-all cursor-pointer shadow-md flex items-center gap-1.5 whitespace-nowrap shrink-0 ${meta.ctaBg}`}
+                          className={`h-11 px-4 sm:px-5 rounded-xl text-[13px] sm:text-[14px] font-black active:scale-95 transition-all cursor-pointer shadow-md flex items-center gap-1.5 whitespace-nowrap shrink-0 bg-white hover:bg-white/90 border border-white/70 ${theme.accentText}`}
                         >
                           <span>Mark attendance</span>
                           <ArrowRight className="w-4 h-4 stroke-[2.5]" />

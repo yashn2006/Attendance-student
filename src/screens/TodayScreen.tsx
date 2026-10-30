@@ -183,6 +183,7 @@ export const TodayScreen: React.FC<TodayScreenProps> = ({ openSelectLectureModal
           statusLabel,
           statusTone,
           canMarkAttendance: !isMarked && hasLiveSession,
+          periodNumber: row.period_number,
         };
       }),
     [lectureRows, nowMinutes, hasLiveSession],
