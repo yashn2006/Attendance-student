@@ -393,7 +393,7 @@ export function App() {
 
   return (
     <IOSPwaInstallGate>
-      <div className={`w-full h-[100dvh] min-h-screen flex flex-col ${isDarkMode ? 'dark' : ''}`}>
+      <div className={`w-full h-[100dvh] min-h-dvh flex flex-col ${isDarkMode ? 'dark' : ''}`}>
         <MobileFrame>
           {/* Toast Notification */}
           {toast && (
@@ -432,7 +432,7 @@ export function App() {
               'onboarding',
             ].includes(activeScreen)
               ? '0px'
-              : 'calc(5.5rem + env(safe-area-inset-bottom, 0px))',
+              : 'calc(5rem + env(safe-area-inset-bottom, 0px) + 24px)',
           }}
         >
           <AnimatePresence mode="wait" initial={false}>
