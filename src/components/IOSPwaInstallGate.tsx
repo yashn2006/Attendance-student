@@ -18,57 +18,114 @@ import {
   Chrome,
   Check,
   ExternalLink,
+  Download,
+  Smartphone,
+  MoreVertical,
 } from 'lucide-react';
 
 interface IOSPwaInstallGateProps {
   children: React.ReactNode;
 }
 
+interface BeforeInstallPromptEvent extends Event {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
+}
+
 const CHROME_INTENT = 'intent://campus-os.coreegin.com#Intent;scheme=https;package=com.android.chrome;end';
 const CHROME_LINK = 'https://campus-os.coreegin.com';
 
+let deferredInstallPrompt: BeforeInstallPromptEvent | null = null;
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (event) => {
+    event.preventDefault();
+    deferredInstallPrompt = event as BeforeInstallPromptEvent;
+  });
+
+  window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null;
+  });
+}
+
+const detectDevice = () => {
+  if (typeof window === 'undefined') {
+    return { isIOS: false, isStandalone: true, isAndroid: false, isAndroidChrome: true };
+  }
+
+  const userAgent = window.navigator.userAgent || '';
+  const isIOSDevice =
+    /iPhone|iPad|iPod/i.test(userAgent) ||
+    (window.navigator.maxTouchPoints > 1 && /Macintosh/i.test(userAgent));
+
+  const standaloneMode =
+    (window.navigator as any).standalone === true ||
+    window.matchMedia('(display-mode: standalone)').matches;
+
+  const isAndroidDevice = /Android/i.test(userAgent);
+  const uaData = (window.navigator as any).userAgentData;
+  const brands: Array<{ brand?: string }> | undefined = uaData?.brands;
+  const hasBrandList = Array.isArray(brands) && brands.length > 0;
+
+  const isChromeOnAndroid = hasBrandList
+    ? brands.some((entry) => entry?.brand === 'Google Chrome')
+    : /Chrome\//.test(userAgent) &&
+      !/(EdgA|OPR\/|SamsungBrowser|Firefox|DuckDuckGo|UCBrowser|YaBrowser|Vivaldi)/i.test(userAgent) &&
+      !/; wv\)/i.test(userAgent);
+
+  return {
+    isIOS: isIOSDevice,
+    isStandalone: standaloneMode,
+    isAndroid: isAndroidDevice,
+    isAndroidChrome: !isAndroidDevice || isChromeOnAndroid,
+  };
+};
+
 export const IOSPwaInstallGate: React.FC<IOSPwaInstallGateProps> = ({ children }) => {
-  const [isIOS, setIsIOS] = useState(false);
-  const [isStandalone, setIsStandalone] = useState(true); // Default true so desktop & Android pass freely
-  const [isAndroid, setIsAndroid] = useState(false);
-  const [isAndroidChrome, setIsAndroidChrome] = useState(true);
+  const [isIOS] = useState(() => detectDevice().isIOS);
+  const [isStandalone] = useState(() => detectDevice().isStandalone);
+  const [isAndroid] = useState(() => detectDevice().isAndroid);
+  const [isAndroidChrome] = useState(() => detectDevice().isAndroidChrome);
   const [devBypass, setDevBypass] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [installPromptAvailable, setInstallPromptAvailable] = useState(
+    () => deferredInstallPrompt !== null,
+  );
+  const [installChecked, setInstallChecked] = useState(() => deferredInstallPrompt !== null);
+  const [installOutcome, setInstallOutcome] = useState<'idle' | 'prompting' | 'installing'>('idle');
+  const [installed, setInstalled] = useState(false);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    const handleAppInstalled = () => {
+      setInstalled(true);
+      setInstallPromptAvailable(false);
+    };
 
-    const userAgent = window.navigator.userAgent || '';
-    const isIOSDevice =
-      /iPhone|iPad|iPod/i.test(userAgent) ||
-      (window.navigator.maxTouchPoints > 1 && /Macintosh/i.test(userAgent));
-
-    const standaloneMode =
-      (window.navigator as any).standalone === true ||
-      window.matchMedia('(display-mode: standalone)').matches;
-
-    const isAndroidDevice = /Android/i.test(userAgent);
-    const uaData = (window.navigator as any).userAgentData;
-    const brands: Array<{ brand?: string }> | undefined = uaData?.brands;
-    const hasBrandList = Array.isArray(brands) && brands.length > 0;
-
-    const isChromeOnAndroid = hasBrandList
-      ? brands.some((entry) => entry?.brand === 'Google Chrome')
-      : /Chrome\//.test(userAgent) &&
-        !/(EdgA|OPR\/|SamsungBrowser|Firefox|DuckDuckGo|UCBrowser|YaBrowser|Vivaldi)/i.test(userAgent) &&
-        !/; wv\)/i.test(userAgent);
-
-    setIsIOS(isIOSDevice);
-    setIsStandalone(standaloneMode);
-    setIsAndroid(isAndroidDevice);
-    setIsAndroidChrome(!isAndroidDevice || isChromeOnAndroid);
+    window.addEventListener('appinstalled', handleAppInstalled);
+    return () => window.removeEventListener('appinstalled', handleAppInstalled);
   }, []);
+
+  useEffect(() => {
+    if (installPromptAvailable) return;
+
+    const timer = window.setTimeout(() => {
+      setInstallPromptAvailable(deferredInstallPrompt !== null);
+      setInstallChecked(true);
+    }, 3000);
+
+    return () => window.clearTimeout(timer);
+  }, [installPromptAvailable]);
 
   // If user is on iOS AND NOT running in standalone mode (and dev bypass not toggled)
   const shouldBlockIOS = isIOS && !isStandalone && !devBypass;
 
   // If user is on Android but not using Chrome, ask them to open in Chrome
   const shouldBlockAndroid = isAndroid && !isAndroidChrome;
+
+  // If user is on Android Chrome but the app is not installed yet
+  const envBypass = import.meta.env.VITE_ALLOW_BROWSER === 'true';
+  const shouldBlockAndroidInstall =
+    isAndroid && isAndroidChrome && !isStandalone && !devBypass && !envBypass;
 
   if (shouldBlockAndroid) {
     const handleCopy = async () => {
@@ -137,6 +194,136 @@ export const IOSPwaInstallGate: React.FC<IOSPwaInstallGateProps> = ({ children }
               Paste the link into Chrome.
             </p>
           </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (shouldBlockAndroidInstall) {
+    const handleInstall = async () => {
+      if (!deferredInstallPrompt) return;
+
+      setInstallOutcome('prompting');
+      try {
+        await deferredInstallPrompt.prompt();
+        const choice = await deferredInstallPrompt.userChoice;
+
+        if (choice?.outcome === 'accepted') {
+          setInstallOutcome('installing');
+        } else {
+          setInstallPromptAvailable(false);
+          setInstallOutcome('idle');
+        }
+      } catch {
+        setInstallPromptAvailable(false);
+        setInstallOutcome('idle');
+      } finally {
+        deferredInstallPrompt = null;
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 z-[9999] bg-[#F8FAFC] dark:bg-[#070B14] text-[#0F172A] dark:text-white font-sans flex flex-col items-center justify-between p-4 sm:p-6 overflow-y-auto select-none pt-safe-header pb-safe-nav">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-lg h-72 bg-gradient-to-b from-indigo-500/10 dark:from-indigo-600/20 via-purple-500/5 dark:via-purple-600/10 to-transparent pointer-events-none blur-3xl" />
+
+        <div className="relative z-10 w-full max-w-md mx-auto space-y-5 my-auto py-2">
+          <div className="flex justify-center">
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-white dark:bg-[#131528] border border-indigo-300 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-300 text-[11px] font-mono font-black tracking-widest uppercase shadow-xs">
+              <Download className="w-3.5 h-3.5" />
+              <span>Install required</span>
+            </div>
+          </div>
+
+          <div className="text-center space-y-2">
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-[#0F172A] dark:text-white leading-tight">
+              Install{' '}
+              <span className="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 dark:from-purple-400 dark:via-indigo-300 dark:to-pink-400 bg-clip-text text-transparent">
+                Campus OS
+              </span>{' '}
+              to continue
+            </h1>
+            <p className="text-xs sm:text-[13px] text-slate-600 dark:text-slate-300 font-medium leading-relaxed max-w-xs mx-auto">
+              Add Campus OS to your home screen for a native, full-screen experience.
+            </p>
+          </div>
+
+          <div className="bg-white dark:bg-[#0E1122] border border-slate-200 dark:border-slate-800/90 rounded-2xl p-4 flex items-center gap-3 shadow-xs">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-300 flex items-center justify-center shrink-0">
+              <Smartphone className="w-5 h-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-xs font-black text-[#0F172A] dark:text-white">Campus OS</h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-snug">
+                Install the app to continue to Attendance.
+              </p>
+            </div>
+          </div>
+
+          {installed ? (
+            <div className="bg-white dark:bg-[#0E1122] border border-emerald-200 dark:border-emerald-500/30 rounded-2xl p-4 flex items-center gap-3 shadow-xs">
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950 border border-emerald-200 dark:border-emerald-500/30 text-emerald-600 dark:text-emerald-300 flex items-center justify-center shrink-0">
+                <Check className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-xs font-black text-[#0F172A] dark:text-white">Installation complete</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-snug">
+                  Installed. Open Campus OS from your home screen.
+                </p>
+              </div>
+            </div>
+          ) : installOutcome === 'installing' ? (
+            <div className="bg-white dark:bg-[#0E1122] border border-slate-200 dark:border-slate-800/90 rounded-2xl p-4 flex items-center gap-3 shadow-xs">
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-300 flex items-center justify-center shrink-0">
+                <Download className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-xs font-black text-[#0F172A] dark:text-white">Finishing installation</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-snug">
+                  Open Campus OS from your home screen once it is installed.
+                </p>
+              </div>
+            </div>
+          ) : installPromptAvailable ? (
+            <div className="space-y-2.5">
+              <button
+                type="button"
+                onClick={handleInstall}
+                disabled={installOutcome === 'prompting'}
+                className="w-full py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 disabled:opacity-70 disabled:cursor-not-allowed text-white font-black text-sm flex items-center justify-center gap-2 transition-colors shadow-lg shadow-indigo-600/20 cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>{installOutcome === 'prompting' ? 'Opening installer...' : 'Install app'}</span>
+              </button>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium text-center">
+                Tap Install app, then confirm the install prompt.
+              </p>
+            </div>
+          ) : installChecked ? (
+            <div className="bg-white dark:bg-[#0E1122] border border-slate-200 dark:border-slate-800/90 rounded-2xl p-4 flex items-start gap-3 shadow-xs">
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-300 flex items-center justify-center shrink-0">
+                <MoreVertical className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-xs font-black text-[#0F172A] dark:text-white">Install from Chrome</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
+                  If you already installed it, open Campus OS from your home screen. Otherwise tap the ⋮
+                  menu in Chrome and choose Install app.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-white dark:bg-[#0E1122] border border-slate-200 dark:border-slate-800/90 rounded-2xl p-4 flex items-center gap-3 shadow-xs">
+              <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-300 flex items-center justify-center shrink-0">
+                <Download className="w-5 h-5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-xs font-black text-[#0F172A] dark:text-white">Checking installation support</h3>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-snug">
+                  This will only take a moment.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     );
