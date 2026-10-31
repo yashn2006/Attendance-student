@@ -211,6 +211,8 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         return 'You have already been marked present for this session.';
       case 'webauthn_failed':
         return 'Device verification failed. Please try again.';
+      case 'browser_not_allowed':
+        return 'Open Campus OS in Chrome to mark attendance.';
       default:
         return reason || 'Attendance rejected. Please try again.';
     }

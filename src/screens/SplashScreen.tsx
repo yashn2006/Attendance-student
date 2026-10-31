@@ -52,7 +52,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ navigate }) => {
           <div className="w-28 h-28 sm:w-32 sm:h-32 rounded-[28px] bg-gradient-to-tr from-indigo-600 via-indigo-500 to-cyan-500 p-1 shadow-[0_16px_40px_rgba(99,102,241,0.35)] relative overflow-hidden">
             <div className="w-full h-full bg-[#0D1527] rounded-[24px] flex items-center justify-center relative overflow-hidden border border-white/20">
               <img
-                src="/campus_os_icon.jpg"
+                src="/icons/icon-192.png"
                 alt="Campus OS Icon"
                 referrerPolicy="no-referrer"
                 className="w-full h-full object-cover rounded-[24px]"

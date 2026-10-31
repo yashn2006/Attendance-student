@@ -15,16 +15,25 @@ import {
   Copy,
   PartyPopper,
   Zap,
+  Chrome,
+  Check,
+  ExternalLink,
 } from 'lucide-react';
 
 interface IOSPwaInstallGateProps {
   children: React.ReactNode;
 }
 
+const CHROME_INTENT = 'intent://campus-os.coreegin.com#Intent;scheme=https;package=com.android.chrome;end';
+const CHROME_LINK = 'https://campus-os.coreegin.com';
+
 export const IOSPwaInstallGate: React.FC<IOSPwaInstallGateProps> = ({ children }) => {
   const [isIOS, setIsIOS] = useState(false);
   const [isStandalone, setIsStandalone] = useState(true); // Default true so desktop & Android pass freely
+  const [isAndroid, setIsAndroid] = useState(false);
+  const [isAndroidChrome, setIsAndroidChrome] = useState(true);
   const [devBypass, setDevBypass] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -38,12 +47,100 @@ export const IOSPwaInstallGate: React.FC<IOSPwaInstallGateProps> = ({ children }
       (window.navigator as any).standalone === true ||
       window.matchMedia('(display-mode: standalone)').matches;
 
+    const isAndroidDevice = /Android/i.test(userAgent);
+    const uaData = (window.navigator as any).userAgentData;
+    const brands: Array<{ brand?: string }> | undefined = uaData?.brands;
+    const hasBrandList = Array.isArray(brands) && brands.length > 0;
+
+    const isChromeOnAndroid = hasBrandList
+      ? brands.some((entry) => entry?.brand === 'Google Chrome')
+      : /Chrome\//.test(userAgent) &&
+        !/(EdgA|OPR\/|SamsungBrowser|Firefox|DuckDuckGo|UCBrowser|YaBrowser|Vivaldi)/i.test(userAgent) &&
+        !/; wv\)/i.test(userAgent);
+
     setIsIOS(isIOSDevice);
     setIsStandalone(standaloneMode);
+    setIsAndroid(isAndroidDevice);
+    setIsAndroidChrome(!isAndroidDevice || isChromeOnAndroid);
   }, []);
 
   // If user is on iOS AND NOT running in standalone mode (and dev bypass not toggled)
   const shouldBlockIOS = isIOS && !isStandalone && !devBypass;
+
+  // If user is on Android but not using Chrome, ask them to open in Chrome
+  const shouldBlockAndroid = isAndroid && !isAndroidChrome;
+
+  if (shouldBlockAndroid) {
+    const handleCopy = async () => {
+      try {
+        await window.navigator.clipboard.writeText(CHROME_LINK);
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 2000);
+      } catch {
+        setCopied(false);
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 z-[9999] bg-[#F8FAFC] dark:bg-[#070B14] text-[#0F172A] dark:text-white font-sans flex flex-col items-center justify-between p-4 sm:p-6 overflow-y-auto select-none pt-safe-header pb-safe-nav">
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-lg h-72 bg-gradient-to-b from-indigo-500/10 dark:from-indigo-600/20 via-purple-500/5 dark:via-purple-600/10 to-transparent pointer-events-none blur-3xl" />
+
+        <div className="relative z-10 w-full max-w-md mx-auto space-y-5 my-auto py-2">
+          <div className="flex justify-center">
+            <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-white dark:bg-[#131528] border border-indigo-300 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-300 text-[11px] font-mono font-black tracking-widest uppercase shadow-xs">
+              <Chrome className="w-3.5 h-3.5" />
+              <span>Chrome required</span>
+            </div>
+          </div>
+
+          <div className="text-center space-y-2">
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-[#0F172A] dark:text-white leading-tight">
+              Open in{' '}
+              <span className="bg-gradient-to-r from-indigo-500 via-purple-500 to-pink-500 dark:from-purple-400 dark:via-indigo-300 dark:to-pink-400 bg-clip-text text-transparent">
+                Chrome
+              </span>
+            </h1>
+            <p className="text-xs sm:text-[13px] text-slate-600 dark:text-slate-300 font-medium leading-relaxed max-w-xs mx-auto">
+              Attendance works best in Google Chrome on Android. Open Campus OS in Chrome to continue.
+            </p>
+          </div>
+
+          <div className="bg-white dark:bg-[#0E1122] border border-slate-200 dark:border-slate-800/90 rounded-2xl p-4 flex items-center gap-3 shadow-xs">
+            <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-950 border border-indigo-200 dark:border-indigo-500/30 text-indigo-600 dark:text-indigo-300 flex items-center justify-center shrink-0">
+              <Chrome className="w-5 h-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <h3 className="text-xs font-black text-[#0F172A] dark:text-white">Google Chrome</h3>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-snug">
+                Tap the button below to switch to Chrome.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2.5">
+            <a
+              href={CHROME_INTENT}
+              className="w-full py-3.5 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-black text-sm flex items-center justify-center gap-2 transition-colors shadow-lg shadow-indigo-600/20"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span>Open in Chrome</span>
+            </a>
+            <button
+              type="button"
+              onClick={handleCopy}
+              className="w-full py-3 rounded-xl bg-white dark:bg-slate-850 hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700/60 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer"
+            >
+              {copied ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+              <span>{copied ? 'Link copied' : 'Copy link'}</span>
+            </button>
+            <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium text-center">
+              Paste the link into Chrome.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (shouldBlockIOS) {
     return (
@@ -187,7 +284,7 @@ export const IOSPwaInstallGate: React.FC<IOSPwaInstallGateProps> = ({ children }
                 </div>
                 <div className="flex items-center gap-2">
                   <img
-                    src="/campus_os_icon.jpg"
+                    src="/icons/icon-192.png"
                     alt="Campus OS"
                     referrerPolicy="no-referrer"
                     className="w-6 h-6 rounded-md object-cover border border-white/20"
@@ -222,7 +319,7 @@ export const IOSPwaInstallGate: React.FC<IOSPwaInstallGateProps> = ({ children }
                 <div className="flex flex-col items-center justify-center space-y-1 z-10">
                   <div className="relative">
                     <img
-                      src="/campus_os_icon.jpg"
+                      src="/icons/icon-192.png"
                       alt="Campus OS"
                       referrerPolicy="no-referrer"
                       className="w-9 h-9 rounded-xl object-cover shadow-lg border border-purple-400/50"
