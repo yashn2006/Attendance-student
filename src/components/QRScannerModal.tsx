@@ -33,6 +33,19 @@ import {
   publicKeyCredentialToAssertion,
 } from '../lib/supabase';
 
+interface DetectedBarcodeLike {
+  rawValue: string;
+}
+
+interface BarcodeDetectorInstance {
+  detect(source: CanvasImageSource): Promise<DetectedBarcodeLike[]>;
+}
+
+interface BarcodeDetectorConstructor {
+  new (options?: { formats?: string[] }): BarcodeDetectorInstance;
+  getSupportedFormats(): Promise<string[]>;
+}
+
 interface QRScannerModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -65,6 +78,12 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number | null>(null);
+  const detectorRef = useRef<BarcodeDetectorInstance | null>(null);
+  const submittingRef = useRef(false);
+  const errorRef = useRef<string | null>(null);
+  const successRef = useRef(false);
+  const handleScanRef = useRef<((label?: string, scannedPayload?: string) => Promise<boolean>) | null>(null);
+  const lastFailureRef = useRef<{ payload: string; time: number } | null>(null);
 
   useEffect(() => {
     getPersistentDeviceId().then((id) => setDeviceId(id));
@@ -232,7 +251,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 
   const handleSimulateScan = useCallback(
   async (label?: string, scannedPayload?: string): Promise<boolean> => {
-      if (scanSuccess) return;
+      if (scanSuccess) return false;
       setErrorMessage(null);
 
       const currentDeviceId = deviceId.startsWith('binding')
@@ -269,13 +288,28 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         return false;
       }
 
-      // 1. Resolve the session (typed code or raw sessionId).
-      const resolved = looksLikeCode
-        ? await resolveSessionByCode(normalizedInput)
-        : isSessionId
-          ? await resolveSessionById(normalizedInput)
-          : null;
+      const isRecognized = looksLikeCode || isSessionId;
 
+      // 1. Resolve the current student (needed by attendance-mark + webauthn-auth-options).
+      const studentId = await resolveStudentId();
+      if (!studentId) {
+        setErrorMessage('You are not signed in. Please log in again.');
+        return false;
+      }
+
+      // 2. Resolve the session and request WebAuthn options concurrently.
+      const [resolved, optsResult] = await Promise.all([
+        looksLikeCode
+          ? resolveSessionByCode(normalizedInput)
+          : isSessionId
+            ? resolveSessionById(normalizedInput)
+            : Promise.resolve(null),
+        isRecognized
+          ? getWebAuthnAuthOptions(studentId)
+          : Promise.resolve(null),
+      ]);
+
+      // 3. Check the session result first (same order/errors as before).
       if (!resolved) {
         setErrorMessage('Unrecognized QR payload. Please scan a valid session QR or type a code.');
         return false;
@@ -285,22 +319,14 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         return false;
       }
 
-      const { sessionId } = resolved.data;
-      const codeEntered = looksLikeCode ? normalizedInput : '';
-
-      // 2. Resolve the current student (needed by attendance-mark + webauthn-auth-options).
-      const studentId = await resolveStudentId();
-      if (!studentId) {
-        setErrorMessage('You are not signed in. Please log in again.');
+      // 4. Then check the WebAuthn options result.
+      if (!optsResult || optsResult.error || !optsResult.data) {
+        setErrorMessage(optsResult?.error || 'No registered device found for this student.');
         return false;
       }
 
-      // 3. Request WebAuthn authentication options for the registered device.
-      const optsResult = await getWebAuthnAuthOptions(studentId);
-      if (optsResult.error || !optsResult.data) {
-        setErrorMessage(optsResult.error || 'No registered device found for this student.');
-        return false  ;
-      }
+      const { sessionId } = resolved.data;
+      const codeEntered = looksLikeCode ? normalizedInput : '';
 
       // 4. Perform the WebAuthn assertion ceremony on the device.
       let webauthnAssertion: unknown;
@@ -328,14 +354,14 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       if (markResult.error) {
         setIsScanning(false);
         setErrorMessage(markResult.error);
-        return;
+        return false;
       }
 
       const markData = markResult.data;
       if (markData?.status !== 'verified') {
         setIsScanning(false);
         setErrorMessage(formatReason(markData?.reason));
-        return;
+        return false;
       }
 
       setIsScanning(false);
@@ -347,8 +373,10 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
         onAttendanceSuccess(currentLecture.id, isOffline);
         setTimeout(() => {
           onClose();
-        }, 700);
-      }, 1100);
+        }, 300);
+      }, 500);
+
+      return true;
     },
     [
       scanSuccess,
@@ -363,7 +391,37 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
     ]
   );
 
-  // Real-time camera QR decoding loop using jsQR
+  // Keep the latest handler and state readable from the frame loop without restarting it.
+  handleScanRef.current = handleSimulateScan;
+  errorRef.current = errorMessage;
+  successRef.current = scanSuccess;
+
+  // Create a single BarcodeDetector instance (if supported) and reuse it.
+  useEffect(() => {
+    let cancelled = false;
+
+    const initDetector = async () => {
+      if (detectorRef.current || !('BarcodeDetector' in window)) return;
+      const Detector = (window as unknown as { BarcodeDetector?: BarcodeDetectorConstructor }).BarcodeDetector;
+      if (!Detector) return;
+      try {
+        const formats = await Detector.getSupportedFormats();
+        if (!cancelled && formats.includes('qr_code') && !detectorRef.current) {
+          detectorRef.current = new Detector({ formats: ['qr_code'] });
+        }
+      } catch {
+        // BarcodeDetector unavailable — jsQR fallback is used.
+      }
+    };
+
+    initDetector();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Real-time camera QR decoding loop (BarcodeDetector when available, jsQR fallback)
   useEffect(() => {
     if (!isOpen || !cameraAllowed || scanSuccess) {
       if (animFrameRef.current) {
@@ -373,49 +431,121 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
       return;
     }
 
-    let isSubmitting = false;
+    let cancelled = false;
+    let detectorBusy = false;
+    let lastDetectorAt = 0;
+    let lastJsQrAt = 0;
+
+    const submitDecoded = (payload: string) => {
+      if (submittingRef.current || errorRef.current || successRef.current) return;
+
+      const now = performance.now();
+      const lastFailure = lastFailureRef.current;
+      if (lastFailure && lastFailure.payload === payload && now - lastFailure.time < 2000) {
+        return;
+      }
+
+      submittingRef.current = true;
+      let failed = false;
+      const handle = handleScanRef.current;
+      const result = handle
+        ? handle(`QR Scanned: ${payload.slice(0, 18)}...`, payload)
+        : Promise.resolve(false);
+
+      result
+        .then((ok) => {
+          failed = !ok;
+        })
+        .catch(() => {
+          failed = true;
+        })
+        .finally(() => {
+          submittingRef.current = false;
+          if (failed) {
+            lastFailureRef.current = { payload, time: performance.now() };
+          }
+        });
+    };
 
     const scanFrame = () => {
-  const video = videoRef.current;
-  const canvas = canvasRef.current;
-  if (video && video.readyState === video.HAVE_ENOUGH_DATA && canvas && !isSubmitting) {
-    const ctx = canvas.getContext('2d', { willReadFrequently: true });
-    if (ctx) {
-      // Scan at a capped resolution — jsQR doesn't need full camera res,
-      // and full-res getImageData on every frame was the main slowdown.
-      const MAX_SCAN_DIM = 480;
-      const vw = video.videoWidth;
-      const vh = video.videoHeight;
-      const scale = Math.min(1, MAX_SCAN_DIM / Math.max(vw, vh));
-      const scanW = Math.round(vw * scale);
-      const scanH = Math.round(vh * scale);
+      if (cancelled) return;
 
-      canvas.width = scanW;
-      canvas.height = scanH;
-      ctx.drawImage(video, 0, 0, scanW, scanH);
-      const imageData = ctx.getImageData(0, 0, scanW, scanH);
-      const code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: 'dontInvert',
-      });
-          if (code && code.data && code.data.trim().length > 0) {
-            isSubmitting = true;
-            handleSimulateScan(`QR Scanned: ${code.data.slice(0, 18)}...`, code.data);
-            return;
+      const video = videoRef.current;
+      if (video && video.readyState === video.HAVE_ENOUGH_DATA) {
+        const now = performance.now();
+        const detector = detectorRef.current;
+
+        if (detector) {
+          if (!detectorBusy && now - lastDetectorAt >= 60) {
+            lastDetectorAt = now;
+            detectorBusy = true;
+            detector
+              .detect(video)
+              .then((barcodes) => {
+                if (!cancelled && barcodes.length > 0) {
+                  const rawValue = barcodes[0].rawValue;
+                  if (rawValue && rawValue.trim().length > 0) {
+                    submitDecoded(rawValue);
+                  }
+                }
+              })
+              .catch(() => {
+                // Detector can throw while the video is re-initialising.
+              })
+              .finally(() => {
+                detectorBusy = false;
+              });
+          }
+        } else if (now - lastJsQrAt >= 80) {
+          lastJsQrAt = now;
+          const canvas = canvasRef.current;
+          const ctx = canvas?.getContext('2d', { willReadFrequently: true });
+
+          if (canvas && ctx) {
+            const vw = video.videoWidth;
+            const vh = video.videoHeight;
+            // Centre square crop: 80% of the shorter video dimension.
+            const cropSide = Math.floor(Math.min(vw, vh) * 0.8);
+
+            if (cropSide > 0) {
+              // Never scale up; cap the longer side at 640 px.
+              const scanSide = Math.min(640, cropSide);
+              if (canvas.width !== scanSide || canvas.height !== scanSide) {
+                canvas.width = scanSide;
+                canvas.height = scanSide;
+              }
+
+              const cropX = Math.floor((vw - cropSide) / 2);
+              const cropY = Math.floor((vh - cropSide) / 2);
+              ctx.drawImage(video, cropX, cropY, cropSide, cropSide, 0, 0, scanSide, scanSide);
+
+              const imageData = ctx.getImageData(0, 0, scanSide, scanSide);
+              const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                inversionAttempts: 'dontInvert',
+              });
+
+              if (code && code.data && code.data.trim().length > 0) {
+                submitDecoded(code.data);
+              }
+            }
           }
         }
       }
+
+      // Always schedule the next frame until this effect is cleaned up.
       animFrameRef.current = requestAnimationFrame(scanFrame);
     };
 
     animFrameRef.current = requestAnimationFrame(scanFrame);
 
     return () => {
+      cancelled = true;
       if (animFrameRef.current) {
         cancelAnimationFrame(animFrameRef.current);
         animFrameRef.current = null;
       }
     };
-  }, [isOpen, cameraAllowed, scanSuccess, handleSimulateScan]);
+  }, [isOpen, cameraAllowed, scanSuccess]);
 
   const handleManualSubmit = async (e: React.FormEvent) => {
   e.preventDefault();
@@ -570,7 +700,7 @@ export const QRScannerModal: React.FC<QRScannerModalProps> = ({
 <p className="text-[10.5px] text-slate-400 font-mono"></p>
 
             <p className="text-[10.5px] text-slate-400 font-mono">
-              Note: OTP refreshes every 4s on classroom screen.
+              Note: OTP refreshes every 15s on classroom screen.
             </p>
 
             {/* OTP Mode Explicit Cancel Button */}
